@@ -3,14 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>遊戲玩家實力記錄器</title>
-    <!-- 引入 Firebase SDK (更新為 11.6.1 版本確保相容性) -->
+    <title>英雄聯盟-統計系統</title>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, doc, updateDoc, onSnapshot, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-        // 支援環境設定或使用您提供的設定檔
         const userConfig = {
             apiKey: "AIzaSyDcH7BFp9xghWLdgvsLseo3XyJG_opf9A8",
             authDomain: "icarus2-50e01.firebaseapp.com",
@@ -26,195 +24,200 @@
         const db = getFirestore(app);
         const auth = getAuth(app);
 
-        // 全域陣列，先從 localStorage 讀取本地快取，達到「本地記錄優化」的秒開體驗
-        let playersData = JSON.parse(localStorage.getItem('cachedPlayers')) || [];
-
-        // 規則 1：產生符合權限規範的集合與文件路徑
-        const getPlayersCollection = () => collection(db, 'artifacts', appId, 'public', 'data', 'players');
-        const getPlayerDoc = (id) => doc(db, 'artifacts', appId, 'public', 'data', 'players', id);
-
-        // 規則 2：必須先完成驗證，才能操作資料庫
-        const initAuth = async () => {
-            try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-            } catch (err) {
-                console.error("驗證登入失敗:", err);
-            }
+        // 更新為您指定的新配色
+        const POS_COLORS = { 
+            MID: '#ff4d4f', // 紅
+            TOP: '#9747FF', // 紫
+            AD:  '#F59E0B', // 金黃
+            JG:  '#10B981', // 綠
+            SUP: '#3B82F6'  // 藍
         };
 
-        // 監聽驗證狀態，確認成功後再獲取資料
+        let activeTab = 'players';
+        let searchQuery = '';
+        let dataStore = { players: [], trash: [] };
+        let draggedId = null;
+        let selectedPos = 'TOP';
+
+        const getCol = (col) => collection(db, 'artifacts', appId, 'public', 'data', col);
+        const getDocRef = (col, id) => doc(db, 'artifacts', appId, 'public', 'data', col, id);
+
         onAuthStateChanged(auth, (user) => {
-            if (!user) return; // 尚未登入則攔截
-            console.log("已通過驗證，開始同步資料...");
-
-            // 規則 3：使用單純查詢，避免 orderBy 造成的權限或索引問題
-            onSnapshot(getPlayersCollection(), (snapshot) => {
-                playersData = [];
-                snapshot.forEach((doc) => {
-                    playersData.push({ id: doc.id, ...doc.data() });
+            if (!user) return;
+            ['players', 'trash'].forEach(col => {
+                onSnapshot(getCol(col), (snapshot) => {
+                    dataStore[col] = [];
+                    snapshot.forEach(d => dataStore[col].push({ id: d.id, ...d.data() }));
+                    dataStore[col].sort((a, b) => (a.order || 0) - (b.order || 0));
+                    render();
                 });
-                
-                // 在前端記憶體中依照分數排序 (由大到小)
-                playersData.sort((a, b) => b.score - a.score);
-
-                // 同步更新本地快取，優化下次開啟速度
-                localStorage.setItem('cachedPlayers', JSON.stringify(playersData));
-
-                renderPlayers();
-            }, (error) => {
-                console.error("資料讀取權限錯誤:", error);
             });
         });
-
-        initAuth();
-
-        // --- 全域 UI 操作函式 ---
         
-        window.openModal = function(id = '') {
-            const p = id ? playersData.find(x => x.id === id) : null;
-            document.getElementById('modalTitle').innerText = p ? '編輯玩家' : '新增玩家';
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) signInWithCustomToken(auth, __initial_auth_token);
+        else signInAnonymously(auth);
+
+        window.updateSearch = (val) => { searchQuery = val.toLowerCase(); render(); };
+        window.switchTab = (tab) => {
+            activeTab = tab;
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+            render();
+        };
+
+        window.selectPos = (pos) => {
+            selectedPos = pos;
+            document.querySelectorAll('.pos-option').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.pos === pos);
+            });
+        };
+
+        window.openModal = (id = '') => {
+            const list = dataStore[activeTab];
+            const p = id ? list.find(x => x.id === id) : null;
             document.getElementById('editId').value = id;
             document.getElementById('name').value = p ? p.name : '';
             document.getElementById('dcName').value = p ? p.dcName : '';
             document.getElementById('score').value = p ? p.score : '';
             document.getElementById('note').value = p ? p.note : '';
+            selectPos(p ? p.pos : 'TOP');
             document.getElementById('modal').style.display = 'flex';
         };
 
-        window.closeModal = function() { 
-            document.getElementById('modal').style.display = 'none'; 
-        };
+        window.closeModal = () => document.getElementById('modal').style.display = 'none';
 
-        window.savePlayer = async function() {
-            if (!auth.currentUser) return alert("資料庫連線中，請稍候...");
-            
+        window.savePlayer = async () => {
             const id = document.getElementById('editId').value;
             const data = {
                 name: document.getElementById('name').value,
                 dcName: document.getElementById('dcName').value,
                 score: parseInt(document.getElementById('score').value) || 0,
+                pos: selectedPos,
                 note: document.getElementById('note').value
             };
-
-            // 【優化核心】：在執行網路傳輸前，先關閉視窗！
-            // 這樣畫面會瞬間消失，Firebase 會在背景處理傳輸，消除使用者的卡頓感。
             closeModal();
+            if (id) await updateDoc(getDocRef(activeTab, id), data);
+            else await addDoc(getCol(activeTab), { ...data, order: Date.now() });
+        };
 
-            try {
-                if (id) {
-                    await updateDoc(getPlayerDoc(id), data);
-                } else {
-                    await addDoc(getPlayersCollection(), data);
-                }
-            } catch (err) {
-                console.error("儲存失敗:", err);
-                alert("網路不穩或儲存失敗，請檢查連線！");
+        window.managePlayer = (id) => {
+            if (confirm("確認刪除嗎？")) deleteDoc(getDocRef(activeTab, id));
+            else openModal(id);
+        };
+
+        window.handleDragStart = (id) => { draggedId = id; };
+        window.handleDrop = async (targetId) => {
+            if (draggedId === targetId) return;
+            const list = dataStore[activeTab];
+            const fromIdx = list.findIndex(i => i.id === draggedId);
+            const toIdx = list.findIndex(i => i.id === targetId);
+            const newList = [...list];
+            const [item] = newList.splice(fromIdx, 1);
+            newList.splice(toIdx, 0, item);
+            for (let i = 0; i < newList.length; i++) {
+                await updateDoc(getDocRef(activeTab, newList[i].id), { order: i });
             }
         };
 
-        window.managePlayer = async function(id) {
-            const p = playersData.find(x => x.id === id);
-            const action = confirm("按「確定」刪除這筆記錄，或按「取消」進行編輯");
-            if (action) {
-                // 【優化核心】：直接執行刪除但不使用 await 阻塞畫面
-                deleteDoc(getPlayerDoc(id)).catch(err => {
-                    console.error("刪除失敗:", err);
-                    alert("刪除失敗！");
-                });
-            } else {
-                openModal(id);
-            }
-        };
-
-        // 渲染畫面
-        function renderPlayers() {
+        function render() {
             const list = document.getElementById('playerList');
-            if (!list) return; // 確保 DOM 存在
             list.innerHTML = '';
-            playersData.forEach((p) => {
+            const filtered = dataStore[activeTab].filter(p => 
+                (p.name || '').toLowerCase().includes(searchQuery) || 
+                (p.dcName || '').toLowerCase().includes(searchQuery)
+            );
+            filtered.forEach(p => {
                 const card = document.createElement('div');
                 card.className = 'player-card';
+                card.draggable = true;
+                card.ondragstart = () => handleDragStart(p.id);
+                card.ondragover = (e) => e.preventDefault();
+                card.ondrop = () => handleDrop(p.id);
                 card.innerHTML = `
-                    <div class="drag-handle" title="按住拖曳 (目前以分數優先排序)">⠿</div>
-                    <div class="player-info">
-                        <div class="player-name">${p.name} <span style="color:var(--primary); margin-left:5px;">(${p.score}分)</span></div>
-                        <div style="font-size:0.85rem; color:#aaa; margin-top:3px;">DC: ${p.dcName}</div>
+                    <div class="drag-handle">⠿</div>
+                    <div class="card-content">
+                        <div class="card-header">
+                            <span class="pos-badge" style="background:${POS_COLORS[p.pos] || '#999'}">${p.pos}</span>
+                            <span class="player-name">${p.name} ${activeTab === 'players' ? `(${p.score}分)` : ''}</span>
+                        </div>
+                        <div class="card-footer">DC: ${p.dcName} | ${p.note}</div>
                     </div>
-                    <div class="menu-dots" onclick="managePlayer('${p.id}')">⋮</div>
+                    <button class="btn-manage" onclick="managePlayer('${p.id}')">⋮</button>
                 `;
                 list.appendChild(card);
             });
         }
-
-        // 初始載入時，先渲染一次本地快取的資料，避免畫面空白等待
-        renderPlayers();
     </script>
     <style>
-        :root { --primary: #3b82f6; --danger: #ef4444; --bg: #121212; --card-bg: #1e1e1e; --text: #e0e0e0; --input-bg: #2d2d2d; }
-        body { font-family: 'Helvetica Neue', Arial, sans-serif; background-color: var(--bg); color: var(--text); margin: 0; padding: 20px; padding-bottom: 100px; }
-        .container { max-width: 600px; margin: 0 auto; }
-        h1 { text-align: center; }
-        .player-card { background: var(--card-bg); border-radius: 12px; padding: 12px; margin-bottom: 10px; display: flex; align-items: center; border: 1px solid #333; }
-        .drag-handle { cursor: grab; padding: 5px; color: #666; font-size: 1.2rem; margin-right: 10px; user-select: none; }
-        .player-info { flex: 1; }
-        .player-name { font-weight: bold; }
-        .menu-dots { cursor: pointer; color: #888; font-size: 1.2rem; padding: 0 10px; }
-        .fab { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 500px; padding: 15px; background: var(--primary); color: white; border: none; border-radius: 50px; font-weight: bold; cursor: pointer; z-index: 50; }
-        .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.7); justify-content: center; align-items: center; z-index: 100; }
-        .modal-content { background: var(--card-bg); padding: 20px; border-radius: 12px; width: 85%; max-width: 400px; }
+        :root { --bg-color: #0a1219; --card-bg: #111e2a; --text-color: #e6edf3; --accent: #61dafb; --input-bg: #182633; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg-color); color: var(--text-color); padding: 20px; box-sizing: border-box; }
+        .container { max-width: 600px; margin: 0 auto; padding-bottom: 100px; }
+        .header { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
+        .logo { width: 50px; height: 50px; object-fit: cover; border-radius: 8px; border: 1px solid #2d455c; }
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab-btn { flex: 1; padding: 12px; background: #162431; border: 1px solid #2d455c; color: #8892b0; cursor: pointer; border-radius: 8px; font-weight: bold; }
+        .tab-btn.active { background: var(--accent); color: #0a1219; }
+        .search-box { width: 100%; padding: 14px; margin-bottom: 20px; background: var(--input-bg); border: 1px solid #2d455c; border-radius: 8px; color: white; box-sizing: border-box; }
+        .player-card { background: var(--card-bg); padding: 16px; margin-bottom: 12px; border-radius: 12px; display: flex; align-items: center; border: 1px solid #2d455c; cursor: grab; }
+        .drag-handle { color: #4a5c6d; font-size: 1.2rem; margin-right: 15px; user-select: none; }
+        .card-content { flex: 1; overflow: hidden; }
+        .card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+        .pos-badge { padding: 2px 6px; border-radius: 4px; color: #fff; font-size: 0.7rem; font-weight: bold; }
+        .player-name { font-weight: bold; font-size: 1rem; }
+        .card-footer { font-size: 0.85rem; color: #8892b0; }
+        .btn-manage { background: none; border: none; color: #8892b0; font-size: 1.5rem; cursor: pointer; }
         
-        /* 新增表單群組排版樣式 */
-        .form-group { display: flex; align-items: center; margin-bottom: 15px; }
-        .form-group.align-top { align-items: flex-start; }
-        .form-group label { width: 70px; text-align: right; margin-right: 15px; color: #ccc; font-size: 0.95rem; flex-shrink: 0; }
-        .form-group.align-top label { padding-top: 10px; } /* 讓「備註」文字對齊文字框第一行 */
-
-        input, textarea { flex: 1; width: 100%; padding: 10px; border: 1px solid #444; border-radius: 6px; background: var(--input-bg); color: white; box-sizing: border-box; }
-        textarea { resize: vertical; min-height: 80px; }
-        .actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+        .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(10,18,25,0.9); justify-content: center; align-items: center; z-index: 100; }
+        .modal-content { background: var(--card-bg); padding: 25px; border-radius: 16px; width: 90%; max-width: 400px; border: 1px solid #2d455c; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; color: #8892b0; font-size: 0.9rem; }
+        input, textarea { width: 100%; padding: 10px; border: 1px solid #2d455c; border-radius: 6px; background: var(--input-bg); color: white; box-sizing: border-box; }
+        
+        .pos-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+        .pos-option { padding: 8px 0; border: 2px solid #2d455c; background: #162431; color: #8892b0; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        .pos-option.active { border-color: var(--accent); color: #fff; }
+        
+        .fab { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 500px; padding: 16px; background: var(--accent); color: #0a1219; border: none; border-radius: 50px; font-weight: bold; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
     </style>
 </head>
 <body>
-
-<div class="container">
-    <h1>玩家實力排行榜</h1>
-    <div id="playerList"></div>
-</div>
-
-<button class="fab" onclick="openModal()">+ 新增玩家</button>
-
-<div class="modal" id="modal">
-    <div class="modal-content">
-        <h2 id="modalTitle" style="margin-top: 0; margin-bottom: 20px; text-align: center;">新增玩家資料</h2>
-        <input type="hidden" id="editId">
-        
-        <div class="form-group">
-            <label for="name">遊戲 ID</label>
-            <input type="text" id="name">
+    <div class="container">
+        <div class="header">
+            <img src="https://i.pinimg.com/736x/d1/b1/1d/d1b11d5e4dbae547ac0d651476cec488.jpg" alt="Logo" class="logo">
+            <h1>玩家統計系統</h1>
         </div>
-        <div class="form-group">
-            <label for="dcName">DC 名稱</label>
-            <input type="text" id="dcName">
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="players" onclick="switchTab('players')">名人榜</button>
+            <button class="tab-btn" data-tab="trash" onclick="switchTab('trash')">畜生名單</button>
         </div>
-        <div class="form-group">
-            <label for="score">實力分數</label>
-            <input type="number" id="score">
-        </div>
-        <div class="form-group align-top">
-            <label for="note">備註</label>
-            <textarea id="note"></textarea>
-        </div>
-
-        <div class="actions">
-            <button onclick="closeModal()" style="background:#555; border:none; padding:8px 15px; color:white; border-radius:6px; cursor:pointer;">取消</button>
-            <button onclick="savePlayer()" style="background:var(--primary); border:none; padding:8px 15px; color:white; border-radius:6px; cursor:pointer;">確認</button>
+        <input type="text" class="search-box" placeholder="🔍 搜尋 ID 或 DC..." oninput="updateSearch(this.value)">
+        <div id="playerList"></div>
+    </div>
+    <button class="fab" onclick="openModal()">+ 新增玩家</button>
+    <div class="modal" id="modal">
+        <div class="modal-content">
+            <h2 style="margin-top:0; color:#fff;">編輯資料</h2>
+            <input type="hidden" id="editId">
+            <div class="form-group"><label>遊戲 ID</label><input type="text" id="name"></div>
+            <div class="form-group"><label>DC 名稱</label><input type="text" id="dcName"></div>
+            <div class="form-group"><label>位置</label>
+                <div class="pos-grid">
+                    <button class="pos-option" data-pos="MID" onclick="selectPos('MID')" style="color:var(--pos-mid)">MID</button>
+                    <button class="pos-option" data-pos="TOP" onclick="selectPos('TOP')" style="color:var(--pos-top)">TOP</button>
+                    <button class="pos-option" data-pos="AD"  onclick="selectPos('AD')"  style="color:var(--pos-ad)">AD</button>
+                    <button class="pos-option" data-pos="JG"  onclick="selectPos('JG')"  style="color:var(--pos-jg)">JG</button>
+                    <button class="pos-option" data-pos="SUP" onclick="selectPos('SUP')" style="color:var(--pos-sup)">SUP</button>
+                </div>
+            </div>
+            <div class="form-group"><label>實力分數</label><input type="number" id="score"></div>
+            <div class="form-group"><label>備註</label><textarea id="note"></textarea></div>
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button onclick="closeModal()" style="padding:10px 20px; background:#2d455c; border:none; border-radius:6px; color:#fff;">取消</button>
+                <button onclick="savePlayer()" style="padding:10px 20px; background:var(--accent); border:none; border-radius:6px; color:#000; font-weight:bold;">儲存</button>
+            </div>
         </div>
     </div>
-</div>
-
+    <style>
+        :root { --pos-mid:#ff4d4f; --pos-top:#9747FF; --pos-ad:#F59E0B; --pos-jg:#10B981; --pos-sup:#3B82F6; }
+    </style>
 </body>
 </html>
