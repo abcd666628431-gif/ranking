@@ -4,26 +4,178 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>遊戲玩家實力記錄器</title>
-    <style>
-        :root { 
-            --primary: #3b82f6; --danger: #ef4444; --bg: #121212; 
-            --card-bg: #1e1e1e; --text: #e0e0e0; --input-bg: #2d2d2d;
+    <!-- 引入 Firebase SDK (更新為 11.6.1 版本確保相容性) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
+        // 支援環境設定或使用您提供的設定檔
+        const userConfig = {
+            apiKey: "AIzaSyDcH7BFp9xghWLdgvsLseo3XyJG_opf9A8",
+            authDomain: "icarus2-50e01.firebaseapp.com",
+            projectId: "icarus2-50e01",
+            storageBucket: "icarus2-50e01.firebasestorage.app",
+            messagingSenderId: "67456823",
+            appId: "1:67456823:web:9b90f0c93d3cd1c7a394b2"
+        };
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : userConfig;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : (userConfig.appId || 'default-app-id');
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        // 全域陣列，先從 localStorage 讀取本地快取，達到「本地記錄優化」的秒開體驗
+        let playersData = JSON.parse(localStorage.getItem('cachedPlayers')) || [];
+
+        // 規則 1：產生符合權限規範的集合與文件路徑
+        const getPlayersCollection = () => collection(db, 'artifacts', appId, 'public', 'data', 'players');
+        const getPlayerDoc = (id) => doc(db, 'artifacts', appId, 'public', 'data', 'players', id);
+
+        // 規則 2：必須先完成驗證，才能操作資料庫
+        const initAuth = async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (err) {
+                console.error("驗證登入失敗:", err);
+            }
+        };
+
+        // 監聽驗證狀態，確認成功後再獲取資料
+        onAuthStateChanged(auth, (user) => {
+            if (!user) return; // 尚未登入則攔截
+            console.log("已通過驗證，開始同步資料...");
+
+            // 規則 3：使用單純查詢，避免 orderBy 造成的權限或索引問題
+            onSnapshot(getPlayersCollection(), (snapshot) => {
+                playersData = [];
+                snapshot.forEach((doc) => {
+                    playersData.push({ id: doc.id, ...doc.data() });
+                });
+                
+                // 在前端記憶體中依照分數排序 (由大到小)
+                playersData.sort((a, b) => b.score - a.score);
+
+                // 同步更新本地快取，優化下次開啟速度
+                localStorage.setItem('cachedPlayers', JSON.stringify(playersData));
+
+                renderPlayers();
+            }, (error) => {
+                console.error("資料讀取權限錯誤:", error);
+            });
+        });
+
+        initAuth();
+
+        // --- 全域 UI 操作函式 ---
+        
+        window.openModal = function(id = '') {
+            const p = id ? playersData.find(x => x.id === id) : null;
+            document.getElementById('modalTitle').innerText = p ? '編輯玩家' : '新增玩家';
+            document.getElementById('editId').value = id;
+            document.getElementById('name').value = p ? p.name : '';
+            document.getElementById('dcName').value = p ? p.dcName : '';
+            document.getElementById('score').value = p ? p.score : '';
+            document.getElementById('note').value = p ? p.note : '';
+            document.getElementById('modal').style.display = 'flex';
+        };
+
+        window.closeModal = function() { 
+            document.getElementById('modal').style.display = 'none'; 
+        };
+
+        window.savePlayer = async function() {
+            if (!auth.currentUser) return alert("資料庫連線中，請稍候...");
+            
+            const id = document.getElementById('editId').value;
+            const data = {
+                name: document.getElementById('name').value,
+                dcName: document.getElementById('dcName').value,
+                score: parseInt(document.getElementById('score').value) || 0,
+                note: document.getElementById('note').value
+            };
+
+            // 【優化核心】：在執行網路傳輸前，先關閉視窗！
+            // 這樣畫面會瞬間消失，Firebase 會在背景處理傳輸，消除使用者的卡頓感。
+            closeModal();
+
+            try {
+                if (id) {
+                    await updateDoc(getPlayerDoc(id), data);
+                } else {
+                    await addDoc(getPlayersCollection(), data);
+                }
+            } catch (err) {
+                console.error("儲存失敗:", err);
+                alert("網路不穩或儲存失敗，請檢查連線！");
+            }
+        };
+
+        window.managePlayer = async function(id) {
+            const p = playersData.find(x => x.id === id);
+            const action = confirm("按「確定」刪除這筆記錄，或按「取消」進行編輯");
+            if (action) {
+                // 【優化核心】：直接執行刪除但不使用 await 阻塞畫面
+                deleteDoc(getPlayerDoc(id)).catch(err => {
+                    console.error("刪除失敗:", err);
+                    alert("刪除失敗！");
+                });
+            } else {
+                openModal(id);
+            }
+        };
+
+        // 渲染畫面
+        function renderPlayers() {
+            const list = document.getElementById('playerList');
+            if (!list) return; // 確保 DOM 存在
+            list.innerHTML = '';
+            playersData.forEach((p) => {
+                const card = document.createElement('div');
+                card.className = 'player-card';
+                card.innerHTML = `
+                    <div class="drag-handle" title="按住拖曳 (目前以分數優先排序)">⠿</div>
+                    <div class="player-info">
+                        <div class="player-name">${p.name} <span style="color:var(--primary); margin-left:5px;">(${p.score}分)</span></div>
+                        <div style="font-size:0.85rem; color:#aaa; margin-top:3px;">DC: ${p.dcName}</div>
+                    </div>
+                    <div class="menu-dots" onclick="managePlayer('${p.id}')">⋮</div>
+                `;
+                list.appendChild(card);
+            });
         }
+
+        // 初始載入時，先渲染一次本地快取的資料，避免畫面空白等待
+        renderPlayers();
+    </script>
+    <style>
+        :root { --primary: #3b82f6; --danger: #ef4444; --bg: #121212; --card-bg: #1e1e1e; --text: #e0e0e0; --input-bg: #2d2d2d; }
         body { font-family: 'Helvetica Neue', Arial, sans-serif; background-color: var(--bg); color: var(--text); margin: 0; padding: 20px; padding-bottom: 100px; }
         .container { max-width: 600px; margin: 0 auto; }
         h1 { text-align: center; }
-
-        .player-card { background: var(--card-bg); border-radius: 12px; padding: 12px; margin-bottom: 10px; display: flex; align-items: center; border: 1px solid #333; transition: transform 0.2s; }
+        .player-card { background: var(--card-bg); border-radius: 12px; padding: 12px; margin-bottom: 10px; display: flex; align-items: center; border: 1px solid #333; }
         .drag-handle { cursor: grab; padding: 5px; color: #666; font-size: 1.2rem; margin-right: 10px; user-select: none; }
-        .player-info { flex: 1; pointer-events: none; }
+        .player-info { flex: 1; }
         .player-name { font-weight: bold; }
-        .menu-dots { cursor: pointer; color: #888; font-size: 1.2rem; padding: 0 10px; position: relative; }
-        
+        .menu-dots { cursor: pointer; color: #888; font-size: 1.2rem; padding: 0 10px; }
         .fab { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 500px; padding: 15px; background: var(--primary); color: white; border: none; border-radius: 50px; font-weight: bold; cursor: pointer; z-index: 50; }
         .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.7); justify-content: center; align-items: center; z-index: 100; }
         .modal-content { background: var(--card-bg); padding: 20px; border-radius: 12px; width: 85%; max-width: 400px; }
-        input, textarea { width: 100%; margin-bottom: 10px; padding: 10px; border: 1px solid #444; border-radius: 6px; background: var(--input-bg); color: white; box-sizing: border-box; }
-        .actions { display: flex; justify-content: flex-end; gap: 10px; }
+        
+        /* 新增表單群組排版樣式 */
+        .form-group { display: flex; align-items: center; margin-bottom: 15px; }
+        .form-group.align-top { align-items: flex-start; }
+        .form-group label { width: 70px; text-align: right; margin-right: 15px; color: #ccc; font-size: 0.95rem; flex-shrink: 0; }
+        .form-group.align-top label { padding-top: 10px; } /* 讓「備註」文字對齊文字框第一行 */
+
+        input, textarea { flex: 1; width: 100%; padding: 10px; border: 1px solid #444; border-radius: 6px; background: var(--input-bg); color: white; box-sizing: border-box; }
+        textarea { resize: vertical; min-height: 80px; }
+        .actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
     </style>
 </head>
 <body>
@@ -37,102 +189,32 @@
 
 <div class="modal" id="modal">
     <div class="modal-content">
-        <h2 id="modalTitle">新增玩家資料</h2>
+        <h2 id="modalTitle" style="margin-top: 0; margin-bottom: 20px; text-align: center;">新增玩家資料</h2>
         <input type="hidden" id="editId">
-        <input type="text" id="name" placeholder="遊戲 ID">
-        <input type="text" id="dcName" placeholder="DC 名稱">
-        <input type="number" id="score" placeholder="實力分數">
-        <textarea id="note" placeholder="備註..."></textarea>
+        
+        <div class="form-group">
+            <label for="name">遊戲 ID</label>
+            <input type="text" id="name">
+        </div>
+        <div class="form-group">
+            <label for="dcName">DC 名稱</label>
+            <input type="text" id="dcName">
+        </div>
+        <div class="form-group">
+            <label for="score">實力分數</label>
+            <input type="number" id="score">
+        </div>
+        <div class="form-group align-top">
+            <label for="note">備註</label>
+            <textarea id="note"></textarea>
+        </div>
+
         <div class="actions">
-            <button onclick="closeModal()">取消</button>
-            <button onclick="savePlayer()" style="background:var(--primary); border:none; padding:8px 15px; color:white; border-radius:6px;">確認</button>
+            <button onclick="closeModal()" style="background:#555; border:none; padding:8px 15px; color:white; border-radius:6px; cursor:pointer;">取消</button>
+            <button onclick="savePlayer()" style="background:var(--primary); border:none; padding:8px 15px; color:white; border-radius:6px; cursor:pointer;">確認</button>
         </div>
     </div>
 </div>
-
-<script>
-    let players = JSON.parse(localStorage.getItem('players')) || [];
-    let draggedItem = null;
-
-    function render() {
-        const list = document.getElementById('playerList');
-        list.innerHTML = '';
-        players.forEach((p, index) => {
-            const card = document.createElement('div');
-            card.className = 'player-card';
-            card.draggable = true;
-            card.dataset.index = index;
-            card.innerHTML = `
-                <div class="drag-handle" onmousedown="enableDrag(this)">⠿</div>
-                <div class="player-info">
-                    <div class="player-name">${p.name} (${p.score}分)</div>
-                    <div style="font-size:0.8rem; color:#aaa;">DC: ${p.dcName}</div>
-                </div>
-                <div class="menu-dots" onclick="showOptionsMenu(event, ${p.id})">⋮</div>
-            `;
-            
-            card.addEventListener('dragstart', () => draggedItem = card);
-            card.addEventListener('dragover', e => e.preventDefault());
-            card.addEventListener('drop', e => handleDrop(e, index));
-            list.appendChild(card);
-        });
-        localStorage.setItem('players', JSON.stringify(players));
-    }
-
-    function enableDrag(el) { el.closest('.player-card').draggable = true; }
-
-    function handleDrop(e, targetIndex) {
-        e.preventDefault();
-        const draggedIndex = parseInt(draggedItem.dataset.index);
-        const movedPlayer = players.splice(draggedIndex, 1)[0];
-        players.splice(targetIndex, 0, movedPlayer);
-        render();
-    }
-
-    function showOptionsMenu(e, id) {
-        const action = confirm("按「確定」刪除，按「取消」編輯");
-        if (action) {
-            players = players.filter(p => p.id !== id);
-            render();
-        } else {
-            const p = players.find(x => x.id === id);
-            openModal(p);
-        }
-    }
-
-    function openModal(p = null) {
-        document.getElementById('modalTitle').innerText = p ? '編輯玩家' : '新增玩家';
-        document.getElementById('editId').value = p ? p.id : '';
-        document.getElementById('name').value = p ? p.name : '';
-        document.getElementById('dcName').value = p ? p.dcName : '';
-        document.getElementById('score').value = p ? p.score : '';
-        document.getElementById('note').value = p ? p.note : '';
-        document.getElementById('modal').style.display = 'flex';
-    }
-
-    function closeModal() { document.getElementById('modal').style.display = 'none'; }
-
-    function savePlayer() {
-        const id = document.getElementById('editId').value;
-        const data = {
-            id: id ? parseInt(id) : Date.now(),
-            name: document.getElementById('name').value,
-            dcName: document.getElementById('dcName').value,
-            score: parseInt(document.getElementById('score').value),
-            note: document.getElementById('note').value
-        };
-        if (id) {
-            const idx = players.findIndex(p => p.id === parseInt(id));
-            players[idx] = data;
-        } else {
-            players.push(data);
-        }
-        closeModal();
-        render();
-    }
-
-    render();
-</script>
 
 </body>
 </html>
