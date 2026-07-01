@@ -28,20 +28,72 @@
         const POS_COLORS = { MID: '#ff4d4f', TOP: '#9747FF', AD: '#F59E0B', JG: '#10B981', SUP: '#EC4899' };
         let activeTab = 'players';
         let searchQuery = '';
+        let activeView = 'tier'; // 預設觀看 'tier'，可隨時切換為 'list'
         let dataStore = { players: [], trash: [] };
         let selectedPos = 'TOP';
-        let sortableInstance = null;
+        let sortableInstances = [];
+        let sortableListInstance = null;
 
         const getCol = (col) => collection(db, 'artifacts', appId, 'public', 'data', col);
 
+        // Tier List 模式的拖曳設定
         function initSortable() {
-            const listEl = document.getElementById('playerList');
-            if (sortableInstance) sortableInstance.destroy();
+            sortableInstances.forEach(inst => inst.destroy());
+            sortableInstances = [];
+
             const currentTab = activeTab;
-            sortableInstance = new Sortable(listEl, {
+            const tiers = ['T1', 'T2', 'T3', 'T4', 'T5'];
+
+            tiers.forEach(tierId => {
+                const el = document.getElementById(`tier-${tierId}`);
+                if (!el) return;
+
+                const inst = new Sortable(el, {
+                    group: 'sharedTiers', 
+                    handle: '.drag-handle',
+                    animation: 150,
+                    forceFallback: true, 
+                    fallbackClass: "sortable-fallback",
+                    ghostClass: "sortable-ghost",
+                    onEnd: async (evt) => {
+                        const id = evt.item.dataset.id;
+                        const toTier = evt.to.dataset.tier;
+                        const newOrder = evt.newIndex;
+
+                        let newScore = parseInt(evt.item.dataset.score) || 0;
+                        if (toTier === 'T1' && newScore < 90) {
+                            newScore = 95;
+                        } else if (toTier === 'T2' && (newScore < 75 || newScore >= 90)) {
+                            newScore = 80;
+                        } else if (toTier === 'T3' && (newScore < 60 || newScore >= 75)) {
+                            newScore = 65;
+                        } else if (toTier === 'T4' && (newScore < 45 || newScore >= 60)) {
+                            newScore = 50;
+                        } else if (toTier === 'T5' && newScore >= 45) {
+                            newScore = 35;
+                        }
+
+                        const docRef = doc(db, 'artifacts', appId, 'public', 'data', currentTab, id);
+                        await updateDoc(docRef, { 
+                            order: newOrder,
+                            score: newScore
+                        });
+                    }
+                });
+                sortableInstances.push(inst);
+            });
+        }
+
+        // 排名列表模式的拖曳設定
+        function initSortableList() {
+            const listEl = document.getElementById('playerList');
+            if (sortableListInstance) sortableListInstance.destroy();
+            
+            const currentTab = activeTab;
+            sortableListInstance = new Sortable(listEl, {
                 handle: '.drag-handle',
                 animation: 150,
-                forceFallback: true, // 強制使用 fallback 以精準控制拖曳元素的 CSS
+                forceFallback: true,
                 fallbackClass: "sortable-fallback",
                 ghostClass: "sortable-ghost",
                 onEnd: async (evt) => {
@@ -65,13 +117,26 @@
             });
         });
         
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) signInWithCustomToken(auth, __initial_auth_token);
-        else signInAnonymously(auth);
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+            signInWithCustomToken(auth, __initial_auth_token).catch((err) => {
+                console.error("Token Auth Error, falling back to anonymous", err);
+                signInAnonymously(auth);
+            });
+        } else {
+            signInAnonymously(auth);
+        }
 
         window.updateSearch = (val) => { searchQuery = val.toLowerCase(); render(); };
+        
         window.switchTab = (tab) => {
             activeTab = tab;
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+            render();
+        };
+
+        window.switchView = (view) => {
+            activeView = view;
+            document.querySelectorAll('.view-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
             render();
         };
 
@@ -85,9 +150,25 @@
             const p = id ? list.find(x => x.id === id) : null;
             document.getElementById('editId').value = id;
             document.getElementById('name').value = p ? p.name : '';
-            document.getElementById('dcName').value = p ? p.dcName : '';
-            document.getElementById('score').value = p ? p.score : '';
+            document.getElementById('nickName').value = p ? (p.nickName || '') : '';
+            document.getElementById('dcName').value = p ? (p.dcName || '') : '';
+            document.getElementById('dcName2').value = p ? (p.dcName2 || '') : '';
             document.getElementById('note').value = p ? p.note : '';
+            
+            // 將實力分數轉換回對應的下拉選單選項 (S, A, B, C, D)
+            let scoreVal = 'D';
+            if (p) {
+                const score = p.score || 0;
+                if (score >= 90) scoreVal = 'S';
+                else if (score >= 75) scoreVal = 'A';
+                else if (score >= 60) scoreVal = 'B';
+                else if (score >= 45) scoreVal = 'C';
+                else scoreVal = 'D';
+            } else {
+                scoreVal = 'S'; // 新增預設為 S
+            }
+            document.getElementById('score').value = scoreVal;
+            
             selectPos(p ? p.pos : 'TOP');
             
             const delBtn = document.getElementById('delBtn');
@@ -99,10 +180,22 @@
 
         window.savePlayer = async () => {
             const id = document.getElementById('editId').value;
+            
+            // 將等級 (S, A, B, C, D) 轉換為數值分數以便資料庫相容
+            const scoreSelect = document.getElementById('score').value;
+            let scoreNum = 35;
+            if (scoreSelect === 'S') scoreNum = 95;
+            else if (scoreSelect === 'A') scoreNum = 80;
+            else if (scoreSelect === 'B') scoreNum = 65;
+            else if (scoreSelect === 'C') scoreNum = 50;
+            else if (scoreSelect === 'D') scoreNum = 35;
+
             const data = {
                 name: document.getElementById('name').value,
+                nickName: document.getElementById('nickName').value || '',
                 dcName: document.getElementById('dcName').value,
-                score: parseInt(document.getElementById('score').value) || 0,
+                dcName2: document.getElementById('dcName2').value || '',
+                score: scoreNum,
                 pos: selectedPos,
                 note: document.getElementById('note').value
             };
@@ -153,7 +246,8 @@
         window.addEventListener('resize', syncNumberHeights);
 
         function syncNumberHeights() {
-            const rows = document.querySelectorAll('.list-row');
+            if (activeView !== 'list') return;
+            const rows = document.querySelectorAll('#playerList .list-row');
             const numCol = document.getElementById('numberColumn');
             if (!numCol) return;
             numCol.innerHTML = '';
@@ -167,105 +261,333 @@
         }
 
         function render() {
-            const list = document.getElementById('playerList');
-            list.innerHTML = '';
+            const tierList = document.getElementById('tierList');
+            const listNormal = document.getElementById('listNormal');
+
+            if (!tierList || !listNormal) return;
+
             const filtered = dataStore[activeTab].filter(p => 
                 (p.name || '').toLowerCase().includes(searchQuery) || 
-                (p.dcName || '').toLowerCase().includes(searchQuery)
+                (p.nickName || '').toLowerCase().includes(searchQuery) || 
+                (p.dcName || '').toLowerCase().includes(searchQuery) ||
+                (p.dcName2 || '').toLowerCase().includes(searchQuery)
             );
-            
-            filtered.forEach((p, index) => {
-                const row = document.createElement('div');
-                row.className = 'list-row';
-                row.dataset.id = p.id;
-                row.innerHTML = `
-                    <div class="player-card">
-                        <div class="card-content" onclick="openModal('${p.id}')">
-                            <div class="card-header">
-                                <span class="pos-badge" style="background:${POS_COLORS[p.pos] || '#999'}">${p.pos}</span>
-                                <span class="player-name">${p.name} ${activeTab === 'players' ? `(${p.score}分)` : ''}</span>
+
+            if (activeView === 'tier') {
+                // 顯示 Tier List 介面
+                tierList.style.display = 'flex';
+                listNormal.style.display = 'none';
+
+                const t1Container = document.getElementById('tier-T1');
+                const t2Container = document.getElementById('tier-T2');
+                const t3Container = document.getElementById('tier-T3');
+                const t4Container = document.getElementById('tier-T4');
+                const t5Container = document.getElementById('tier-T5');
+
+                t1Container.innerHTML = '';
+                t2Container.innerHTML = '';
+                t3Container.innerHTML = '';
+                t4Container.innerHTML = '';
+                t5Container.innerHTML = '';
+
+                filtered.forEach((p) => {
+                    const row = document.createElement('div');
+                    row.className = 'list-row';
+                    row.dataset.id = p.id;
+                    row.dataset.score = p.score || 0;
+                    
+                    const score = p.score || 0;
+                    let currentTierLetter = 'D';
+                    if (score >= 90) currentTierLetter = 'S';
+                    else if (score >= 75) currentTierLetter = 'A';
+                    else if (score >= 60) currentTierLetter = 'B';
+                    else if (score >= 45) currentTierLetter = 'C';
+                    
+                    // 分級模式下：卡片信息只顯示 位置（pos） 與 暱稱（nickName）
+                    // 增加 .card-tooltip，懸停時顯示完整信息
+                    row.innerHTML = `
+                        <div class="player-card">
+                            <div class="card-content">
+                                <div class="card-header" style="margin-bottom: 0;">
+                                    <span class="pos-badge" style="background:${POS_COLORS[p.pos] || '#999'}">${p.pos}</span>
+                                    <span class="player-name" style="font-size: 0.85rem; font-weight: normal; margin-left: 4px;">${p.nickName || ''}</span>
+                                </div>
                             </div>
-                            <div class="card-footer">DC: ${p.dcName} | ${p.note}</div>
+                            <div class="card-actions">
+                                <span class="drag-handle" title="拖曳">⠿</span>
+                                <span class="menu-dots" onclick="openModal('${p.id}')" title="編輯">⋮</span>
+                            </div>
+                            
+                            <!-- 完整信息懸停提示框 (加入暱稱/顯示名資訊) -->
+                            <div class="card-tooltip">
+                                <div class="tooltip-title">${p.name || '未填寫遊戲 ID'}</div>
+                                <div class="tooltip-line">暱稱 (顯示名): <span>${p.nickName || '無'}</span></div>
+                                <div class="tooltip-line">DC 名稱: <span>${p.dcName || '無'}</span></div>
+                                ${p.dcName2 ? `<div class="tooltip-line" style="padding-left: 54px;"><span>${p.dcName2}</span></div>` : ''}
+                                <div class="tooltip-line">實力分級: <span>${currentTierLetter} 級</span></div>
+                                <div class="tooltip-line">位置: <span>${p.pos}</span></div>
+                                <div class="tooltip-line" style="border-top: 1px dashed #2d455c; margin-top: 6px; padding-top: 4px; white-space: normal;">
+                                    備註: <span>${p.note || '無備註'}</span>
+                                </div>
+                            </div>
                         </div>
-                        <div class="card-actions">
-                            <span class="drag-handle" title="拖曳">⠿</span>
-                            <span class="menu-dots" onclick="openModal('${p.id}')" title="編輯">⋮</span>
+                    `;
+                    
+                    if (score >= 90) {
+                        t1Container.appendChild(row);
+                    } else if (score >= 75) {
+                        t2Container.appendChild(row);
+                    } else if (score >= 60) {
+                        t3Container.appendChild(row);
+                    } else if (score >= 45) {
+                        t4Container.appendChild(row);
+                    } else {
+                        t5Container.appendChild(row);
+                    }
+                });
+                
+                initSortable();
+            } else {
+                // 顯示一般排名列表介面
+                tierList.style.display = 'none';
+                listNormal.style.display = 'block';
+
+                const list = document.getElementById('playerList');
+                list.innerHTML = '';
+
+                filtered.forEach((p) => {
+                    const row = document.createElement('div');
+                    row.className = 'list-row list-row-full';
+                    row.dataset.id = p.id;
+                    
+                    const score = p.score || 0;
+                    let currentTierLetter = 'D';
+                    if (score >= 90) currentTierLetter = 'S';
+                    else if (score >= 75) currentTierLetter = 'A';
+                    else if (score >= 60) currentTierLetter = 'B';
+                    else if (score >= 45) currentTierLetter = 'C';
+
+                    // 列表模式中合併展示兩行 DC 名稱，暱稱也一併附加在遊戲 ID 旁
+                    const dcMerged = p.dcName2 ? `${p.dcName} / ${p.dcName2}` : (p.dcName || '無');
+                    const displayNameCombined = p.nickName ? `${p.name} (${p.nickName})` : p.name;
+
+                    row.innerHTML = `
+                        <div class="player-card">
+                            <div class="card-content">
+                                <div class="card-header">
+                                    <span class="pos-badge" style="background:${POS_COLORS[p.pos] || '#999'}">${p.pos}</span>
+                                    <span class="player-name">${displayNameCombined} ${activeTab === 'players' ? `(${currentTierLetter}級)` : ''}</span>
+                                </div>
+                                <div class="card-footer">DC: ${dcMerged} | ${p.note}</div>
+                            </div>
+                            <div class="card-actions">
+                                <span class="drag-handle" title="拖曳">⠿</span>
+                                <span class="menu-dots" onclick="openModal('${p.id}')" title="編輯">⋮</span>
+                            </div>
                         </div>
-                    </div>
-                `;
-                list.appendChild(row);
-            });
-            requestAnimationFrame(() => syncNumberHeights());
-            initSortable();
+                    `;
+                    list.appendChild(row);
+                });
+
+                requestAnimationFrame(() => syncNumberHeights());
+                initSortableList();
+            }
         }
     </script>
     <style>
         :root { --bg-color: #0a1219; --card-bg: #111e2a; --text-color: #e6edf3; --accent: #61dafb; --input-bg: #182633; }
         body { font-family: 'Segoe UI', sans-serif; background: var(--bg-color); color: var(--text-color); padding: 20px; box-sizing: border-box; }
-        .container { max-width: 600px; margin: 0 auto; padding-bottom: 100px; }
+        .container { max-width: 800px; margin: 0 auto; padding-bottom: 100px; }
         .header { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
         .logo { width: 50px; height: 50px; object-fit: cover; border-radius: 8px; border: 1px solid #2d455c; }
+        
         .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
         .tab-btn { flex: 1; padding: 12px; background: #162431; border: 1px solid #2d455c; color: #8892b0; cursor: pointer; border-radius: 8px; font-weight: bold; }
         .tab-btn.active { background: var(--accent); color: #0a1219; }
-        .search-box { width: 100%; padding: 14px; margin-bottom: 20px; background: var(--input-bg); border: 1px solid #2d455c; border-radius: 8px; color: white; box-sizing: border-box; }
+
+        /* 搜尋欄與切換按鈕區間 */
+        .search-row { display: flex; gap: 10px; margin-bottom: 20px; align-items: center; }
+        .search-box { flex: 1; padding: 14px; background: var(--input-bg); border: 1px solid #2d455c; border-radius: 8px; color: white; box-sizing: border-box; }
         
-        .list-row { margin-bottom: 12px; }
+        /* 介面檢視切換按鈕 */
+        .view-switcher { display: flex; gap: 6px; flex-shrink: 0; }
+        .view-btn { padding: 12px 16px; background: #162431; border: 1px solid #2d455c; color: #8892b0; cursor: pointer; border-radius: 8px; font-weight: bold; font-size: 0.9rem; transition: all 0.2s; }
+        .view-btn.active { background: var(--accent); color: #0a1219; }
+
+        /* 兩種介面的容器 */
+        .list-container { width: 100%; }
+        
+        /* 排名列表介面結構 */
+        .normal-list-view-layout { display: flex; align-items: flex-start; gap: 10px; width: 100%; }
+        .number-column { width: 35px; flex-shrink: 0; }
+        .player-list-container { flex: 1; min-width: 0; }
         .static-rank-num { display: flex; align-items: center; justify-content: center; font-weight: bold; color: var(--accent); font-size: 1.1rem; margin-bottom: 12px; }
+
+        /* Tier List 介面結構 */
+        .tier-list-container { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+        .tier-row { display: flex; background: #0f1c2c; border: 1px solid #2d455c; border-radius: 12px; min-height: 90px; position: relative; }
         
-        /* 拖曳中：原本的空位呈現虛線卡片樣式 */
+        .tier-header { width: 110px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; text-align: center; font-weight: bold; font-size: 1.2rem; color: #000; padding: 10px; box-sizing: border-box; line-height: 1.3; border-top-left-radius: 11px; border-bottom-left-radius: 11px; }
+        .tier-content { flex: 1; display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; min-height: 70px; background: #111e2a; align-items: center; border-top-right-radius: 11px; border-bottom-right-radius: 11px; }
+
+        /* 完美還原上傳圖片的經典 Tier 配色與新增的 D 級淺藍色 */
+        .tier-t1 { background-color: #ff7f7f; }
+        .tier-t2 { background-color: #ffbf7f; }
+        .tier-t3 { background-color: #ffff7f; }
+        .tier-t4 { background-color: #bf7fff; }
+        .tier-t5 { background-color: #80d4ff; } /* 淺藍色 D 級別 */
+
+        /* 卡片寬度調校 */
+        .list-row { width: auto; box-sizing: border-box; position: relative; }
+        .list-row-full { width: 100% !important; margin-bottom: 12px; }
+
+        /* 拖曳虛線空位樣式 */
         .sortable-ghost .player-card { background: transparent !important; border: 2px dashed #2d455c !important; }
         .sortable-ghost .player-card * { visibility: hidden !important; }
 
-        .player-card { flex: 1; background: var(--card-bg); padding: 16px; border-radius: 12px; display: flex; align-items: center; border: 1px solid #2d455c; }
-        .card-content { flex: 1; overflow: hidden; cursor: pointer; }
-        .card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+        /* 微調卡片內部樣式，以配合緊湊的自適應外觀 */
+        .player-card { background: var(--card-bg); padding: 8px 12px; border-radius: 8px; display: flex; align-items: center; border: 1px solid #2d455c; gap: 6px; position: relative; }
+        .card-content { display: flex; align-items: center; overflow: hidden; cursor: default; } /* 卡片本體滑鼠樣式改為 default */
+        .card-header { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
         .pos-badge { padding: 2px 6px; border-radius: 4px; color: #fff; font-size: 0.7rem; font-weight: bold; }
-        .player-name { font-weight: bold; font-size: 1rem; }
-        .card-footer { font-size: 0.85rem; color: #8892b0; }
-        .card-actions { display: flex; align-items: center; gap: 10px; margin-left: 10px; color: #556677; }
-        .drag-handle { font-size: 1.2rem; cursor: grab; padding: 5px; }
-        .menu-dots { font-size: 1.2rem; cursor: pointer; padding: 5px; }
+        .player-name { font-weight: bold; font-size: 0.95rem; white-space: nowrap; }
+        .card-footer { font-size: 0.8rem; color: #8892b0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .card-actions { display: flex; align-items: center; gap: 6px; margin-left: 6px; color: #556677; }
+        .drag-handle { font-size: 1.1rem; cursor: grab; padding: 2px; }
+        .menu-dots { font-size: 1.1rem; cursor: pointer; padding: 2px; }
         .menu-dots:hover { color: var(--accent); }
-        .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(10,18,25,0.9); justify-content: center; align-items: center; z-index: 100; }
+        
+        /* 精緻懸停完整信息提示框 (Tooltip) */
+        .card-tooltip {
+            display: none;
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #0d1a24;
+            border: 1px solid var(--accent);
+            border-radius: 8px;
+            padding: 12px 14px;
+            width: 220px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.85);
+            z-index: 999;
+            pointer-events: auto; /* 允許滑鼠移進 Tooltip */
+            box-sizing: border-box;
+            text-align: left;
+            margin-bottom: 10px;
+        }
+        
+        /* 完美修復箭頭：採用 45度旋轉方塊，繼承藍色邊框與背景，呈現極致清晰、無缺失的完美箭頭 */
+        .card-tooltip::after {
+            content: '';
+            position: absolute;
+            bottom: -6px; /* 露出底部尖角 */
+            left: 50%;
+            transform: translateX(-50%) rotate(45deg);
+            width: 10px;
+            height: 10px;
+            background: #0d1a24;
+            border-right: 1px solid var(--accent);
+            border-bottom: 1px solid var(--accent);
+            z-index: 1000;
+        }
+        
+        /* 透明銜接橋樑：讓滑鼠在移向提示框時不會因為微小間隙導致消失 */
+        .card-tooltip::before {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 0;
+            width: 100%;
+            height: 15px;
+            background: transparent;
+        }
+        /* 懸浮觸發顯示 */
+        .player-card:hover .card-tooltip {
+            display: block;
+        }
+        .tooltip-title {
+            font-weight: bold;
+            font-size: 0.95rem;
+            color: #fff;
+            margin-bottom: 6px;
+            border-bottom: 1px solid #2d455c;
+            padding-bottom: 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .tooltip-line {
+            font-size: 0.8rem;
+            color: #8892b0;
+            margin-bottom: 4px;
+            line-height: 1.4;
+        }
+        .tooltip-line span {
+            color: #e6edf3;
+            font-weight: 500;
+        }
+
+        /* 彈出編輯視窗 */
+        .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(10,18,25,0.9); justify-content: center; align-items: center; z-index: 1000; }
         .modal-content { background: var(--card-bg); padding: 25px; border-radius: 16px; width: 90%; max-width: 400px; border: 1px solid #2d455c; }
         .form-group { margin-bottom: 15px; }
         .form-group label { display: block; margin-bottom: 5px; color: #8892b0; font-size: 0.9rem; }
-        input, textarea { width: 100%; padding: 10px; border: 1px solid #2d455c; border-radius: 6px; background: var(--input-bg); color: white; box-sizing: border-box; }
+        
+        /* 確保輸入框文字在所有瀏覽器與 iframe 環境下皆能正常用滑鼠選取與複製 */
+        input, textarea, select { 
+            width: 100%; 
+            padding: 10px; 
+            border: 1px solid #2d455c; 
+            border-radius: 6px; 
+            background: var(--input-bg); 
+            color: white; 
+            box-sizing: border-box; 
+            user-select: text !important;
+            -webkit-user-select: text !important;
+            -moz-user-select: text !important;
+            -ms-user-select: text !important;
+        }
         .pos-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
         .pos-option { padding: 8px 0; border: 2px solid #2d455c; background: #162431; color: #8892b0; border-radius: 6px; cursor: pointer; font-weight: bold; }
         .pos-option.active { border-color: var(--accent); color: #fff; }
+        
         .fab { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 500px; padding: 16px; background: var(--accent); color: #0a1219; border: none; border-radius: 50px; font-weight: bold; box-shadow: 0 4px 15px rgba(0,0,0,0.5); z-index: 50; }
         .btn-del { background: #ff4d4f !important; color: white !important; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; }
-        
-        /* 版面結構 class */
-        .list-container { display: flex; align-items: flex-start; gap: 10px; }
-        .number-column { width: 35px; flex-shrink: 0; }
-        .player-list-container { flex: 1; min-width: 0; }
 
-        /* 手機版優化 (整體縮小) */
+        /* 手機版優化 */
         @media (max-width: 600px) {
             body { padding: 10px; }
             .header h1 { font-size: 1.4rem; }
             .logo { width: 40px; height: 40px; }
             .tab-btn { padding: 8px; font-size: 0.9rem; }
-            .search-box { padding: 10px; font-size: 0.9rem; margin-bottom: 12px; }
             
-            .list-container { gap: 5px; }
+            .search-row { flex-direction: column; gap: 10px; align-items: stretch; margin-bottom: 15px; }
+            .search-box { padding: 10px; font-size: 0.9rem; }
+            .view-switcher { width: 100%; }
+            .view-btn { flex: 1; text-align: center; padding: 10px; font-size: 0.85rem; }
+
+            .tier-row { min-height: 80px; }
+            .tier-header { width: 85px; font-size: 1.1rem; padding: 6px; }
+            .tier-content { padding: 6px; gap: 6px; }
+            
+            .normal-list-view-layout { gap: 5px; }
             .number-column { width: 25px; }
             .static-rank-num { font-size: 1rem; margin-bottom: 10px; }
-            .list-row { margin-bottom: 10px; }
-            
-            .player-card { padding: 10px 12px; border-radius: 8px; }
-            .player-name { font-size: 0.9rem; }
+
+            .player-card { padding: 8px 10px; border-radius: 8px; }
+            .player-name { font-size: 0.85rem; }
             .pos-badge { font-size: 0.65rem; padding: 2px 4px; }
             .card-footer { font-size: 0.75rem; }
-            .card-actions { gap: 5px; margin-left: 5px; }
-            .drag-handle, .menu-dots { font-size: 1rem; padding: 2px; }
+            .card-actions { gap: 4px; margin-left: 4px; }
+            .drag-handle, .menu-dots { font-size: 1rem; padding: 1px; }
+            
+            /* 手機版隱藏 Tooltip 以防止干擾點擊觸控 */
+            .player-card:hover .card-tooltip { display: none; }
             
             .pos-option { padding: 5px 0; font-size: 0.8rem; }
             .modal-content { padding: 15px; width: 92%; }
-            input, textarea { padding: 8px; font-size: 0.9rem; }
+            input, textarea, select { padding: 8px; font-size: 0.9rem; }
             .form-group { margin-bottom: 12px; }
         }
     </style>
@@ -280,10 +602,50 @@
             <button class="tab-btn active" data-tab="players" onclick="switchTab('players')">評級榜</button>
             <button class="tab-btn" data-tab="trash" onclick="switchTab('trash')">畜生名單</button>
         </div>
-        <input type="text" class="search-box" placeholder="🔍 搜尋 ID 或 DC..." oninput="updateSearch(this.value)">
+        <div class="search-row">
+            <input type="text" class="search-box" placeholder="🔍 搜尋 ID 或 DC..." oninput="updateSearch(this.value)">
+            <div class="view-switcher">
+                <button class="view-btn active" data-view="tier" onclick="switchView('tier')">分級模式</button>
+                <button class="view-btn" data-view="list" onclick="switchView('list')">排名列表</button>
+            </div>
+        </div>
         <div class="list-container">
-            <div id="numberColumn" class="number-column"></div>
-            <div id="playerList" class="player-list-container"></div>
+            <!-- 列表檢視模式 -->
+            <div id="listNormal" style="display: none; width: 100%;">
+                <div class="normal-list-view-layout">
+                    <div id="numberColumn" class="number-column"></div>
+                    <div id="playerList" class="player-list-container"></div>
+                </div>
+            </div>
+
+            <!-- Tier List 區間分級介面 -->
+            <div id="tierList" class="tier-list-container">
+                <!-- Tier 1 -->
+                <div class="tier-row">
+                    <div class="tier-header tier-t1">S</div>
+                    <div id="tier-T1" class="tier-content" data-tier="T1"></div>
+                </div>
+                <!-- Tier 2 -->
+                <div class="tier-row">
+                    <div class="tier-header tier-t2">A</div>
+                    <div id="tier-T2" class="tier-content" data-tier="T2"></div>
+                </div>
+                <!-- Tier 3 -->
+                <div class="tier-row">
+                    <div class="tier-header tier-t3">B</div>
+                    <div id="tier-T3" class="tier-content" data-tier="T3"></div>
+                </div>
+                <!-- Tier 4 -->
+                <div class="tier-row">
+                    <div class="tier-header tier-t4">C</div>
+                    <div id="tier-T4" class="tier-content" data-tier="T4"></div>
+                </div>
+                <!-- Tier 5 -->
+                <div class="tier-row">
+                    <div class="tier-header tier-t5">D</div>
+                    <div id="tier-T5" class="tier-content" data-tier="T5"></div>
+                </div>
+            </div>
         </div>
     </div>
     <button class="fab" onclick="openModal()">+ 新增玩家</button>
@@ -292,7 +654,14 @@
             <h2 style="margin-top:0; color:#fff;">編輯資料</h2>
             <input type="hidden" id="editId">
             <div class="form-group"><label>遊戲 ID</label><input type="text" id="name"></div>
-            <div class="form-group"><label>DC 名稱</label><input type="text" id="dcName"></div>
+            <!-- 在遊戲ID下新增暱稱(顯示名)輸入框 -->
+            <div class="form-group"><label>暱稱(顯示名)</label><input type="text" id="nickName" placeholder="卡片顯示的自訂名稱"></div>
+            <!-- DC 名稱輸入框組合 -->
+            <div class="form-group">
+                <label>DC 名稱</label>
+                <input type="text" id="dcName" style="margin-bottom: 8px;" placeholder="主要 DC 帳號">
+                <input type="text" id="dcName2" placeholder="備用 DC 帳號 (選填)">
+            </div>
             <div class="form-group"><label>位置</label>
                 <div class="pos-grid">
                     <button class="pos-option" data-pos="MID" onclick="selectPos('MID')" style="color:#ff4d4f">MID</button>
@@ -302,7 +671,16 @@
                     <button class="pos-option" data-pos="SUP" onclick="selectPos('SUP')" style="color:#EC4899">SUP</button>
                 </div>
             </div>
-            <div class="form-group"><label>實力分數</label><input type="number" id="score"></div>
+            <div class="form-group">
+                <label>實力分級</label>
+                <select id="score">
+                    <option value="S">S</option>
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                    <option value="D">D</option>
+                </select>
+            </div>
             <div class="form-group"><label>備註</label><textarea id="note"></textarea></div>
             <div style="display:flex; justify-content:space-between; gap:10px;">
                 <button id="delBtn" class="btn-del" onclick="deletePlayer()">刪除</button>
