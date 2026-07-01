@@ -33,6 +33,7 @@
         let selectedPos = 'TOP';
         let sortableInstances = [];
         let sortableListInstance = null;
+        let isEditMode = false; // 新增：追蹤目前是否為編輯模式
 
         const getCol = (col) => collection(db, 'artifacts', appId, 'public', 'data', col);
 
@@ -42,7 +43,7 @@
             sortableInstances = [];
 
             const currentTab = activeTab;
-            const tiers = ['T1', 'T2', 'T3', 'T4', 'T5'];
+            const tiers = ['T0', 'T1', 'T2', 'T3', 'T4', 'T5'];
 
             tiers.forEach(tierId => {
                 const el = document.getElementById(`tier-${tierId}`);
@@ -52,6 +53,7 @@
                     group: 'sharedTiers', 
                     handle: '.drag-handle',
                     animation: 150,
+                    disabled: !isEditMode, // 依照開關決定是否啟用拖曳
                     forceFallback: true, 
                     fallbackClass: "sortable-fallback",
                     ghostClass: "sortable-ghost",
@@ -61,7 +63,9 @@
                         const newOrder = evt.newIndex;
 
                         let newScore = parseInt(evt.item.dataset.score) || 0;
-                        if (toTier === 'T1' && newScore < 90) {
+                        if (toTier === 'T0' && newScore < 105) {
+                            newScore = 110;
+                        } else if (toTier === 'T1' && (newScore < 90 || newScore >= 105)) {
                             newScore = 95;
                         } else if (toTier === 'T2' && (newScore < 75 || newScore >= 90)) {
                             newScore = 80;
@@ -93,6 +97,7 @@
             sortableListInstance = new Sortable(listEl, {
                 handle: '.drag-handle',
                 animation: 150,
+                disabled: !isEditMode, // 依照開關決定是否啟用拖曳
                 forceFallback: true,
                 fallbackClass: "sortable-fallback",
                 ghostClass: "sortable-ghost",
@@ -126,6 +131,19 @@
             signInAnonymously(auth);
         }
 
+        // 新增：切換編輯模式的功能
+        window.toggleEditMode = (checked) => {
+            isEditMode = checked;
+            if (checked) {
+                document.body.classList.add('edit-mode');
+            } else {
+                document.body.classList.remove('edit-mode');
+            }
+            // 同步更新當下拖曳套件的可用狀態
+            sortableInstances.forEach(inst => inst.option("disabled", !isEditMode));
+            if (sortableListInstance) sortableListInstance.option("disabled", !isEditMode);
+        };
+
         window.updateSearch = (val) => { searchQuery = val.toLowerCase(); render(); };
         
         window.switchTab = (tab) => {
@@ -155,17 +173,18 @@
             document.getElementById('dcName2').value = p ? (p.dcName2 || '') : '';
             document.getElementById('note').value = p ? p.note : '';
             
-            // 將實力分數轉換回對應的下拉選單選項 (S, A, B, C, D)
+            // 將實力分數轉換回對應的下拉選單選項 (S+, S, A, B, C, D)
             let scoreVal = 'D';
             if (p) {
                 const score = p.score || 0;
-                if (score >= 90) scoreVal = 'S';
+                if (score >= 105) scoreVal = 'S+';
+                else if (score >= 90) scoreVal = 'S';
                 else if (score >= 75) scoreVal = 'A';
                 else if (score >= 60) scoreVal = 'B';
                 else if (score >= 45) scoreVal = 'C';
                 else scoreVal = 'D';
             } else {
-                scoreVal = 'S'; // 新增預設為 S
+                scoreVal = 'S+'; // 新增預設為 S+
             }
             document.getElementById('score').value = scoreVal;
             
@@ -181,10 +200,11 @@
         window.savePlayer = async () => {
             const id = document.getElementById('editId').value;
             
-            // 將等級 (S, A, B, C, D) 轉換為數值分數以便資料庫相容
+            // 將等級 (S+, S, A, B, C, D) 轉換為數值分數以便資料庫相容
             const scoreSelect = document.getElementById('score').value;
             let scoreNum = 35;
-            if (scoreSelect === 'S') scoreNum = 95;
+            if (scoreSelect === 'S+') scoreNum = 110;
+            else if (scoreSelect === 'S') scoreNum = 95;
             else if (scoreSelect === 'A') scoreNum = 80;
             else if (scoreSelect === 'B') scoreNum = 65;
             else if (scoreSelect === 'C') scoreNum = 50;
@@ -278,12 +298,14 @@
                 tierList.style.display = 'flex';
                 listNormal.style.display = 'none';
 
+                const t0Container = document.getElementById('tier-T0');
                 const t1Container = document.getElementById('tier-T1');
                 const t2Container = document.getElementById('tier-T2');
                 const t3Container = document.getElementById('tier-T3');
                 const t4Container = document.getElementById('tier-T4');
                 const t5Container = document.getElementById('tier-T5');
 
+                if (t0Container) t0Container.innerHTML = '';
                 t1Container.innerHTML = '';
                 t2Container.innerHTML = '';
                 t3Container.innerHTML = '';
@@ -298,7 +320,8 @@
                     
                     const score = p.score || 0;
                     let currentTierLetter = 'D';
-                    if (score >= 90) currentTierLetter = 'S';
+                    if (score >= 105) currentTierLetter = 'S+';
+                    else if (score >= 90) currentTierLetter = 'S';
                     else if (score >= 75) currentTierLetter = 'A';
                     else if (score >= 60) currentTierLetter = 'B';
                     else if (score >= 45) currentTierLetter = 'C';
@@ -310,7 +333,7 @@
                             <div class="card-content">
                                 <div class="card-header" style="margin-bottom: 0;">
                                     <span class="pos-badge" style="background:${POS_COLORS[p.pos] || '#999'}">${p.pos}</span>
-                                    <span class="player-name" style="font-size: 0.85rem; font-weight: normal; margin-left: 4px;">${p.nickName || ''}</span>
+                                    <span class="player-name" style="font-size: 0.85rem; font-weight: normal; margin-left: 4px;">${p.nickName || '-'}</span>
                                 </div>
                             </div>
                             <div class="card-actions">
@@ -320,20 +343,27 @@
                             
                             <!-- 完整信息懸停提示框 (加入暱稱/顯示名資訊) -->
                             <div class="card-tooltip">
-                                <div class="tooltip-title">${p.name || '未填寫遊戲 ID'}</div>
-                                <div class="tooltip-line">暱稱 (顯示名): <span>${p.nickName || '無'}</span></div>
-                                <div class="tooltip-line">DC 名稱: <span>${p.dcName || '無'}</span></div>
-                                ${p.dcName2 ? `<div class="tooltip-line" style="padding-left: 54px;"><span>${p.dcName2}</span></div>` : ''}
-                                <div class="tooltip-line">實力分級: <span>${currentTierLetter} 級</span></div>
-                                <div class="tooltip-line">位置: <span>${p.pos}</span></div>
+                                <div class="tooltip-title">${p.name || '-'}</div>
+                                <div class="tooltip-grid">
+                                    <div class="tooltip-label">暱稱</div>
+                                    <div class="tooltip-value">${p.nickName || '-'}</div>
+                                    <div class="tooltip-label">DC 名稱</div>
+                                    <div class="tooltip-value">${p.dcName || '-'}${p.dcName2 ? `<br>${p.dcName2}` : ''}</div>
+                                    <div class="tooltip-label">實力分級</div>
+                                    <div class="tooltip-value">${currentTierLetter} 級</div>
+                                    <div class="tooltip-label">位置</div>
+                                    <div class="tooltip-value">${p.pos}</div>
+                                </div>
                                 <div class="tooltip-line" style="border-top: 1px dashed #2d455c; margin-top: 6px; padding-top: 4px; white-space: normal;">
-                                    備註: <span>${p.note || '無備註'}</span>
+                                    備註: <span>${p.note || '-'}</span>
                                 </div>
                             </div>
                         </div>
                     `;
                     
-                    if (score >= 90) {
+                    if (score >= 105) {
+                        if (t0Container) t0Container.appendChild(row);
+                    } else if (score >= 90) {
                         t1Container.appendChild(row);
                     } else if (score >= 75) {
                         t2Container.appendChild(row);
@@ -362,14 +392,15 @@
                     
                     const score = p.score || 0;
                     let currentTierLetter = 'D';
-                    if (score >= 90) currentTierLetter = 'S';
+                    if (score >= 105) currentTierLetter = 'S+';
+                    else if (score >= 90) currentTierLetter = 'S';
                     else if (score >= 75) currentTierLetter = 'A';
                     else if (score >= 60) currentTierLetter = 'B';
                     else if (score >= 45) currentTierLetter = 'C';
 
                     // 列表模式中合併展示兩行 DC 名稱，暱稱也一併附加在遊戲 ID 旁
-                    const dcMerged = p.dcName2 ? `${p.dcName} / ${p.dcName2}` : (p.dcName || '無');
-                    const displayNameCombined = p.nickName ? `${p.name} (${p.nickName})` : p.name;
+                    const dcMerged = [p.dcName, p.dcName2].filter(x => x && x.trim() !== '').join(' / ') || '-';
+                    const displayNameCombined = p.nickName ? `${p.name || '-'} (${p.nickName})` : (p.name || '-');
 
                     row.innerHTML = `
                         <div class="player-card">
@@ -378,7 +409,7 @@
                                     <span class="pos-badge" style="background:${POS_COLORS[p.pos] || '#999'}">${p.pos}</span>
                                     <span class="player-name">${displayNameCombined} ${activeTab === 'players' ? `(${currentTierLetter}級)` : ''}</span>
                                 </div>
-                                <div class="card-footer">DC: ${dcMerged} | ${p.note}</div>
+                                <div class="card-footer">DC: ${dcMerged} | ${p.note || '-'}</div>
                             </div>
                             <div class="card-actions">
                                 <span class="drag-handle" title="拖曳">⠿</span>
@@ -407,8 +438,21 @@
 
         /* 搜尋欄與切換按鈕區間 */
         .search-row { display: flex; gap: 10px; margin-bottom: 20px; align-items: center; }
-        .search-box { flex: 1; padding: 14px; background: var(--input-bg); border: 1px solid #2d455c; border-radius: 8px; color: white; box-sizing: border-box; }
+        .search-box { flex: 1; padding: 14px; background: var(--input-bg); border: 1px solid #2d455c; border-radius: 8px; color: white; box-sizing: border-box; min-width: 0; }
         
+        /* 搜尋列右側控制區 */
+        .search-controls { display: flex; align-items: center; gap: 15px; flex-shrink: 0; }
+        
+        /* 開關 UI 樣式 */
+        .edit-toggle-wrapper { display: flex; align-items: center; gap: 8px; }
+        .edit-toggle-label { font-size: 0.9rem; font-weight: bold; color: #8892b0; }
+        .switch { position: relative; display: inline-block; width: 44px; height: 24px; margin: 0; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #cccccc; transition: .4s; border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: #FF54A5; } /* 使用您截圖中的粉紅色 */
+        input:checked + .slider:before { transform: translateX(20px); }
+
         /* 介面檢視切換按鈕 */
         .view-switcher { display: flex; gap: 6px; flex-shrink: 0; }
         .view-btn { padding: 12px 16px; background: #162431; border: 1px solid #2d455c; color: #8892b0; cursor: pointer; border-radius: 8px; font-weight: bold; font-size: 0.9rem; transition: all 0.2s; }
@@ -430,7 +474,8 @@
         .tier-header { width: 110px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; text-align: center; font-weight: bold; font-size: 1.2rem; color: #000; padding: 10px; box-sizing: border-box; line-height: 1.3; border-top-left-radius: 11px; border-bottom-left-radius: 11px; }
         .tier-content { flex: 1; display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; min-height: 70px; background: #111e2a; align-items: center; border-top-right-radius: 11px; border-bottom-right-radius: 11px; }
 
-        /* 完美還原上傳圖片的經典 Tier 配色與新增的 D 級淺藍色 */
+        /* 完美還原上傳圖片的經典 Tier 配色與新增的 D 級淺藍色、S+ 級紅色 */
+        .tier-t0 { background-color: #ff4d4f; }
         .tier-t1 { background-color: #ff7f7f; }
         .tier-t2 { background-color: #ffbf7f; }
         .tier-t3 { background-color: #ffff7f; }
@@ -446,15 +491,20 @@
         .sortable-ghost .player-card * { visibility: hidden !important; }
 
         /* 微調卡片內部樣式，以配合緊湊的自適應外觀 */
-        .player-card { background: var(--card-bg); padding: 8px 12px; border-radius: 8px; display: flex; align-items: center; border: 1px solid #2d455c; gap: 6px; position: relative; }
+        .player-card { background: var(--card-bg); padding: 8px 12px; border-radius: 8px; display: flex; align-items: center; border: 1px solid #2d455c; gap: 4px; position: relative; }
         .card-content { display: flex; align-items: center; overflow: hidden; cursor: default; } /* 卡片本體滑鼠樣式改為 default */
         .card-header { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
         .pos-badge { padding: 2px 6px; border-radius: 4px; color: #fff; font-size: 0.7rem; font-weight: bold; }
         .player-name { font-weight: bold; font-size: 0.95rem; white-space: nowrap; }
         .card-footer { font-size: 0.8rem; color: #8892b0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .card-actions { display: flex; align-items: center; gap: 6px; margin-left: 6px; color: #556677; }
-        .drag-handle { font-size: 1.1rem; cursor: grab; padding: 2px; }
-        .menu-dots { font-size: 1.1rem; cursor: pointer; padding: 2px; }
+        
+        /* 隱藏/顯示操作按鈕 (依照是否開啟編輯模式決定) */
+        .card-actions { display: none; align-items: center; gap: 6px; margin-left: 6px; color: #556677; }
+        body.edit-mode .card-actions { display: flex; }
+        
+        .drag-handle { font-size: 1.1rem; cursor: grab; padding: 2px; transition: color 0.2s ease; }
+        .drag-handle:hover { color: var(--accent); }
+        .menu-dots { font-size: 1.1rem; cursor: pointer; padding: 2px; transition: color 0.2s ease; }
         .menu-dots:hover { color: var(--accent); }
         
         /* 精緻懸停完整信息提示框 (Tooltip) */
@@ -517,6 +567,22 @@
             text-overflow: ellipsis;
             white-space: nowrap;
         }
+        .tooltip-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 4px 8px;
+            font-size: 0.8rem;
+            margin-bottom: 4px;
+            line-height: 1.4;
+        }
+        .tooltip-label {
+            color: #8892b0;
+            white-space: nowrap;
+        }
+        .tooltip-value {
+            color: #e6edf3;
+            font-weight: 500;
+        }
         .tooltip-line {
             font-size: 0.8rem;
             color: #8892b0;
@@ -564,8 +630,9 @@
             
             .search-row { flex-direction: column; gap: 10px; align-items: stretch; margin-bottom: 15px; }
             .search-box { padding: 10px; font-size: 0.9rem; }
-            .view-switcher { width: 100%; }
-            .view-btn { flex: 1; text-align: center; padding: 10px; font-size: 0.85rem; }
+            .search-controls { width: 100%; justify-content: space-between; }
+            .view-switcher { flex: 1; justify-content: flex-end; }
+            .view-btn { text-align: center; padding: 8px 12px; font-size: 0.85rem; }
 
             .tier-row { min-height: 80px; }
             .tier-header { width: 85px; font-size: 1.1rem; padding: 6px; }
@@ -604,9 +671,18 @@
         </div>
         <div class="search-row">
             <input type="text" class="search-box" placeholder="🔍 搜尋 ID 或 DC..." oninput="updateSearch(this.value)">
-            <div class="view-switcher">
-                <button class="view-btn active" data-view="tier" onclick="switchView('tier')">分級模式</button>
-                <button class="view-btn" data-view="list" onclick="switchView('list')">排名列表</button>
+            <div class="search-controls">
+                <div class="edit-toggle-wrapper">
+                    <span class="edit-toggle-label">編輯</span>
+                    <label class="switch">
+                        <input type="checkbox" id="editModeToggle" onchange="toggleEditMode(this.checked)">
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+                <div class="view-switcher">
+                    <button class="view-btn active" data-view="tier" onclick="switchView('tier')">分級模式</button>
+                    <button class="view-btn" data-view="list" onclick="switchView('list')">排名列表</button>
+                </div>
             </div>
         </div>
         <div class="list-container">
@@ -620,6 +696,11 @@
 
             <!-- Tier List 區間分級介面 -->
             <div id="tierList" class="tier-list-container">
+                <!-- Tier 0 (S+) -->
+                <div class="tier-row">
+                    <div class="tier-header tier-t0">S+</div>
+                    <div id="tier-T0" class="tier-content" data-tier="T0"></div>
+                </div>
                 <!-- Tier 1 -->
                 <div class="tier-row">
                     <div class="tier-header tier-t1">S</div>
@@ -674,6 +755,7 @@
             <div class="form-group">
                 <label>實力分級</label>
                 <select id="score">
+                    <option value="S+">S+</option>
                     <option value="S">S</option>
                     <option value="A">A</option>
                     <option value="B">B</option>
