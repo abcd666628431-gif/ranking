@@ -30,7 +30,7 @@
         let searchQuery = '';
         let activeView = 'tier'; // 預設觀看 'tier'，可隨時切換為 'list'
         let dataStore = { players: [], trash: [] };
-        let selectedPos = 'TOP';
+        let selectedPos = []; // 預設不選取任何位置
         let sortableInstances = [];
         let sortableListInstance = null;
         let isEditMode = false; // 新增：追蹤目前是否為編輯模式
@@ -159,8 +159,16 @@
         };
 
         window.selectPos = (pos) => {
-            selectedPos = pos;
-            document.querySelectorAll('.pos-option').forEach(btn => btn.classList.toggle('active', btn.dataset.pos === pos));
+            if (selectedPos.includes(pos)) {
+                // 如果已經包含，則移除（反選）
+                selectedPos = selectedPos.filter(p => p !== pos);
+            } else {
+                // 如果沒有包含，則加入
+                selectedPos.push(pos);
+            }
+            document.querySelectorAll('.pos-option').forEach(btn => {
+                btn.classList.toggle('active', selectedPos.includes(btn.dataset.pos));
+            });
         };
 
         window.openModal = (id = '') => {
@@ -188,7 +196,16 @@
             }
             document.getElementById('score').value = scoreVal;
             
-            selectPos(p ? p.pos : 'TOP');
+            // 讀取舊資料時相容單字串，並轉為陣列
+            let pPos = p ? p.pos : []; // 新增時預設不選取任何位置
+            if (typeof pPos === 'string') {
+                pPos = [pPos];
+            }
+            selectedPos = [...pPos];
+            
+            document.querySelectorAll('.pos-option').forEach(btn => {
+                btn.classList.toggle('active', selectedPos.includes(btn.dataset.pos));
+            });
             
             const delBtn = document.getElementById('delBtn');
             delBtn.style.display = id ? 'block' : 'none';
@@ -216,7 +233,7 @@
                 dcName: document.getElementById('dcName').value,
                 dcName2: document.getElementById('dcName2').value || '',
                 score: scoreNum,
-                pos: selectedPos,
+                pos: selectedPos, // 這裡現在會儲存包含多個位置的陣列
                 note: document.getElementById('note').value
             };
             closeModal();
@@ -326,13 +343,18 @@
                     else if (score >= 60) currentTierLetter = 'B';
                     else if (score >= 45) currentTierLetter = 'C';
                     
+                    // 確保將位置資料轉為陣列，並生成多個標籤
+                    const posArray = Array.isArray(p.pos) ? p.pos : [p.pos || 'TOP'];
+                    const posHtml = posArray.map(pos => `<span class="pos-badge" style="background:${POS_COLORS[pos] || '#999'}">${pos}</span>`).join('');
+                    const posDisplayStr = posArray.join(', ');
+                    
                     // 分級模式下：卡片信息只顯示 位置（pos） 與 暱稱（nickName）
                     // 增加 .card-tooltip，懸停時顯示完整信息
                     row.innerHTML = `
                         <div class="player-card">
                             <div class="card-content">
                                 <div class="card-header" style="margin-bottom: 0;">
-                                    <span class="pos-badge" style="background:${POS_COLORS[p.pos] || '#999'}">${p.pos}</span>
+                                    <div class="pos-badge-container">${posHtml}</div>
                                     <span class="player-name" style="font-size: 0.85rem; font-weight: normal; margin-left: 4px;">${p.nickName || '-'}</span>
                                 </div>
                             </div>
@@ -352,7 +374,7 @@
                                     <div class="tooltip-label">實力分級</div>
                                     <div class="tooltip-value">${currentTierLetter} 級</div>
                                     <div class="tooltip-label">位置</div>
-                                    <div class="tooltip-value">${p.pos}</div>
+                                    <div class="tooltip-value">${posDisplayStr}</div>
                                 </div>
                                 <div class="tooltip-line" style="border-top: 1px dashed #2d455c; margin-top: 6px; padding-top: 4px; white-space: normal;">
                                     備註: <span>${p.note || '-'}</span>
@@ -402,12 +424,16 @@
                     const dcMerged = [p.dcName, p.dcName2].filter(x => x && x.trim() !== '').join(' / ') || '-';
                     const displayNameCombined = p.nickName ? `${p.name || '-'} (${p.nickName})` : (p.name || '-');
 
+                    // 確保將位置資料轉為陣列，並生成多個標籤
+                    const posArray = Array.isArray(p.pos) ? p.pos : [p.pos || 'TOP'];
+                    const posHtml = posArray.map(pos => `<span class="pos-badge" style="background:${POS_COLORS[pos] || '#999'}">${pos}</span>`).join('');
+
                     row.innerHTML = `
                         <div class="player-card">
                             <div class="card-content">
                                 <div class="card-header">
-                                    <span class="pos-badge" style="background:${POS_COLORS[p.pos] || '#999'}">${p.pos}</span>
-                                    <span class="player-name">${displayNameCombined} ${activeTab === 'players' ? `(${currentTierLetter}級)` : ''}</span>
+                                    <div class="pos-badge-container">${posHtml}</div>
+                                    <span class="player-name" style="margin-left: 4px;">${displayNameCombined} ${activeTab === 'players' ? `(${currentTierLetter}級)` : ''}</span>
                                 </div>
                                 <div class="card-footer">DC: ${dcMerged} | ${p.note || '-'}</div>
                             </div>
@@ -492,9 +518,10 @@
 
         /* 微調卡片內部樣式，以配合緊湊的自適應外觀 */
         .player-card { background: var(--card-bg); padding: 8px 12px; border-radius: 8px; display: flex; align-items: center; border: 1px solid #2d455c; gap: 4px; position: relative; }
-        .card-content { display: flex; align-items: center; overflow: hidden; cursor: default; } /* 卡片本體滑鼠樣式改為 default */
+        .card-content { display: flex; align-items: center; min-width: 0; overflow: visible; cursor: default; } /* 移除 overflow:hidden 避免標籤邊角被裁切(少了半個圈) */
         .card-header { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
-        .pos-badge { padding: 2px 6px; border-radius: 4px; color: #fff; font-size: 0.7rem; font-weight: bold; }
+        .pos-badge-container { display: flex; flex-direction: column; gap: 2px; align-items: center; position: relative; top: 0; }
+        .pos-badge { padding: 2px 6px; border-radius: 20px; color: #fff; font-size: 0.55rem; font-weight: bold; line-height: 1.2; text-align: center; }
         .player-name { font-weight: bold; font-size: 0.95rem; white-space: nowrap; }
         .card-footer { font-size: 0.8rem; color: #8892b0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         
@@ -644,7 +671,8 @@
 
             .player-card { padding: 8px 10px; border-radius: 8px; }
             .player-name { font-size: 0.85rem; }
-            .pos-badge { font-size: 0.65rem; padding: 2px 4px; }
+            .pos-badge-container { top: 0px; }
+            .pos-badge { font-size: 0.5rem; padding: 1px 5px; }
             .card-footer { font-size: 0.75rem; }
             .card-actions { gap: 4px; margin-left: 4px; }
             .drag-handle, .menu-dots { font-size: 1rem; padding: 1px; }
