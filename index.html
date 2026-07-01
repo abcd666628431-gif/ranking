@@ -24,13 +24,8 @@
         const db = getFirestore(app);
         const auth = getAuth(app);
 
-        // 更新為您指定的新配色
         const POS_COLORS = { 
-            MID: '#ff4d4f', // 紅
-            TOP: '#9747FF', // 紫
-            AD:  '#F59E0B', // 金黃
-            JG:  '#10B981', // 綠
-            SUP: '#3B82F6'  // 藍
+            MID: '#ff4d4f', TOP: '#9747FF', AD:  '#F59E0B', JG:  '#10B981', SUP: '#3B82F6' 
         };
 
         let activeTab = 'players';
@@ -80,6 +75,7 @@
             document.getElementById('score').value = p ? p.score : '';
             document.getElementById('note').value = p ? p.note : '';
             selectPos(p ? p.pos : 'TOP');
+            document.getElementById('delBtn').style.display = id ? 'block' : 'none';
             document.getElementById('modal').style.display = 'flex';
         };
 
@@ -99,22 +95,11 @@
             else await addDoc(getCol(activeTab), { ...data, order: Date.now() });
         };
 
-        window.managePlayer = (id) => {
-            if (confirm("確認刪除嗎？")) deleteDoc(getDocRef(activeTab, id));
-            else openModal(id);
-        };
-
-        window.handleDragStart = (id) => { draggedId = id; };
-        window.handleDrop = async (targetId) => {
-            if (draggedId === targetId) return;
-            const list = dataStore[activeTab];
-            const fromIdx = list.findIndex(i => i.id === draggedId);
-            const toIdx = list.findIndex(i => i.id === targetId);
-            const newList = [...list];
-            const [item] = newList.splice(fromIdx, 1);
-            newList.splice(toIdx, 0, item);
-            for (let i = 0; i < newList.length; i++) {
-                await updateDoc(getDocRef(activeTab, newList[i].id), { order: i });
+        window.deleteCurrentPlayer = async () => {
+            const id = document.getElementById('editId').value;
+            if (id && confirm("確認刪除此玩家嗎？")) {
+                await deleteDoc(getDocRef(activeTab, id));
+                closeModal();
             }
         };
 
@@ -128,12 +113,8 @@
             filtered.forEach(p => {
                 const card = document.createElement('div');
                 card.className = 'player-card';
-                card.draggable = true;
-                card.ondragstart = () => handleDragStart(p.id);
-                card.ondragover = (e) => e.preventDefault();
-                card.ondrop = () => handleDrop(p.id);
+                card.onclick = () => openModal(p.id);
                 card.innerHTML = `
-                    <div class="drag-handle">⠿</div>
                     <div class="card-content">
                         <div class="card-header">
                             <span class="pos-badge" style="background:${POS_COLORS[p.pos] || '#999'}">${p.pos}</span>
@@ -141,7 +122,6 @@
                         </div>
                         <div class="card-footer">DC: ${p.dcName} | ${p.note}</div>
                     </div>
-                    <button class="btn-manage" onclick="managePlayer('${p.id}')">⋮</button>
                 `;
                 list.appendChild(card);
             });
@@ -157,14 +137,12 @@
         .tab-btn { flex: 1; padding: 12px; background: #162431; border: 1px solid #2d455c; color: #8892b0; cursor: pointer; border-radius: 8px; font-weight: bold; }
         .tab-btn.active { background: var(--accent); color: #0a1219; }
         .search-box { width: 100%; padding: 14px; margin-bottom: 20px; background: var(--input-bg); border: 1px solid #2d455c; border-radius: 8px; color: white; box-sizing: border-box; }
-        .player-card { background: var(--card-bg); padding: 16px; margin-bottom: 12px; border-radius: 12px; display: flex; align-items: center; border: 1px solid #2d455c; cursor: grab; }
-        .drag-handle { color: #4a5c6d; font-size: 1.2rem; margin-right: 15px; user-select: none; }
+        .player-card { background: var(--card-bg); padding: 16px; margin-bottom: 12px; border-radius: 12px; display: flex; align-items: center; border: 1px solid #2d455c; cursor: pointer; }
         .card-content { flex: 1; overflow: hidden; }
         .card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
         .pos-badge { padding: 2px 6px; border-radius: 4px; color: #fff; font-size: 0.7rem; font-weight: bold; }
         .player-name { font-weight: bold; font-size: 1rem; }
         .card-footer { font-size: 0.85rem; color: #8892b0; }
-        .btn-manage { background: none; border: none; color: #8892b0; font-size: 1.5rem; cursor: pointer; }
         
         .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(10,18,25,0.9); justify-content: center; align-items: center; z-index: 100; }
         .modal-content { background: var(--card-bg); padding: 25px; border-radius: 16px; width: 90%; max-width: 400px; border: 1px solid #2d455c; }
@@ -177,6 +155,7 @@
         .pos-option.active { border-color: var(--accent); color: #fff; }
         
         .fab { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 500px; padding: 16px; background: var(--accent); color: #0a1219; border: none; border-radius: 50px; font-weight: bold; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        .btn-del { background: #ff4d4f !important; color: white !important; }
     </style>
 </head>
 <body>
@@ -201,23 +180,23 @@
             <div class="form-group"><label>DC 名稱</label><input type="text" id="dcName"></div>
             <div class="form-group"><label>位置</label>
                 <div class="pos-grid">
-                    <button class="pos-option" data-pos="MID" onclick="selectPos('MID')" style="color:var(--pos-mid)">MID</button>
-                    <button class="pos-option" data-pos="TOP" onclick="selectPos('TOP')" style="color:var(--pos-top)">TOP</button>
-                    <button class="pos-option" data-pos="AD"  onclick="selectPos('AD')"  style="color:var(--pos-ad)">AD</button>
-                    <button class="pos-option" data-pos="JG"  onclick="selectPos('JG')"  style="color:var(--pos-jg)">JG</button>
-                    <button class="pos-option" data-pos="SUP" onclick="selectPos('SUP')" style="color:var(--pos-sup)">SUP</button>
+                    <button class="pos-option" data-pos="MID" onclick="selectPos('MID')" style="color:#ff4d4f">MID</button>
+                    <button class="pos-option" data-pos="TOP" onclick="selectPos('TOP')" style="color:#9747FF">TOP</button>
+                    <button class="pos-option" data-pos="AD"  onclick="selectPos('AD')"  style="color:#F59E0B">AD</button>
+                    <button class="pos-option" data-pos="JG"  onclick="selectPos('JG')"  style="color:#10B981">JG</button>
+                    <button class="pos-option" data-pos="SUP" onclick="selectPos('SUP')" style="color:#3B82F6">SUP</button>
                 </div>
             </div>
             <div class="form-group"><label>實力分數</label><input type="number" id="score"></div>
             <div class="form-group"><label>備註</label><textarea id="note"></textarea></div>
-            <div style="display:flex; justify-content:flex-end; gap:10px;">
-                <button onclick="closeModal()" style="padding:10px 20px; background:#2d455c; border:none; border-radius:6px; color:#fff;">取消</button>
-                <button onclick="savePlayer()" style="padding:10px 20px; background:var(--accent); border:none; border-radius:6px; color:#000; font-weight:bold;">儲存</button>
+            <div style="display:flex; justify-content:space-between; gap:10px;">
+                <button id="delBtn" class="btn-del" onclick="deleteCurrentPlayer()" style="padding:10px 20px; border:none; border-radius:6px; cursor:pointer;">刪除</button>
+                <div style="display:flex; gap:10px;">
+                    <button onclick="closeModal()" style="padding:10px 20px; background:#2d455c; border:none; border-radius:6px; color:#fff; cursor:pointer;">取消</button>
+                    <button onclick="savePlayer()" style="padding:10px 20px; background:var(--accent); border:none; border-radius:6px; color:#000; font-weight:bold; cursor:pointer;">儲存</button>
+                </div>
             </div>
         </div>
     </div>
-    <style>
-        :root { --pos-mid:#ff4d4f; --pos-top:#9747FF; --pos-ad:#F59E0B; --pos-jg:#10B981; --pos-sup:#3B82F6; }
-    </style>
 </body>
 </html>
