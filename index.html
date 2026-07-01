@@ -24,13 +24,11 @@
         const db = getFirestore(app);
         const auth = getAuth(app);
 
-        const POS_COLORS = { 
-            MID: '#ff4d4f', TOP: '#9747FF', AD:  '#F59E0B', JG:  '#10B981', SUP: '#3B82F6' 
-        };
-
+        const POS_COLORS = { MID: '#ff4d4f', TOP: '#9747FF', AD: '#F59E0B', JG: '#10B981', SUP: '#3B82F6' };
         let activeTab = 'players';
         let searchQuery = '';
         let dataStore = { players: [], trash: [] };
+        let draggedId = null;
         let selectedPos = 'TOP';
 
         const getCol = (col) => collection(db, 'artifacts', appId, 'public', 'data', col);
@@ -60,9 +58,7 @@
 
         window.selectPos = (pos) => {
             selectedPos = pos;
-            document.querySelectorAll('.pos-option').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.pos === pos);
-            });
+            document.querySelectorAll('.pos-option').forEach(btn => btn.classList.toggle('active', btn.dataset.pos === pos));
         };
 
         window.openModal = (id = '') => {
@@ -96,32 +92,47 @@
 
         window.deleteCurrentPlayer = async () => {
             const id = document.getElementById('editId').value;
-            if (id && confirm("確認刪除此玩家嗎？")) {
-                await deleteDoc(getDocRef(activeTab, id));
-                closeModal();
-            }
+            if (id && confirm("確認刪除此玩家嗎？")) { await deleteDoc(getDocRef(activeTab, id)); closeModal(); }
+        };
+
+        window.handleDragStart = (id, el) => { draggedId = id; el.classList.add('dragging'); };
+        window.handleDragEnd = (el) => { el.classList.remove('dragging'); };
+        window.handleDrop = async (targetId) => {
+            if (draggedId === targetId) return;
+            const list = dataStore[activeTab];
+            const fromIdx = list.findIndex(i => i.id === draggedId);
+            const toIdx = list.findIndex(i => i.id === targetId);
+            const newList = [...list];
+            const [item] = newList.splice(fromIdx, 1);
+            newList.splice(toIdx, 0, item);
+            for (let i = 0; i < newList.length; i++) await updateDoc(getDocRef(activeTab, newList[i].id), { order: i });
         };
 
         function render() {
             const list = document.getElementById('playerList');
             list.innerHTML = '';
-            const filtered = dataStore[activeTab].filter(p => 
-                (p.name || '').toLowerCase().includes(searchQuery) || 
-                (p.dcName || '').toLowerCase().includes(searchQuery)
-            );
-            
+            const filtered = dataStore[activeTab].filter(p => (p.name || '').toLowerCase().includes(searchQuery) || (p.dcName || '').toLowerCase().includes(searchQuery));
             filtered.forEach((p, index) => {
                 const wrapper = document.createElement('div');
                 wrapper.className = 'list-row';
+                wrapper.draggable = true;
+                wrapper.ondragstart = () => handleDragStart(p.id, wrapper);
+                wrapper.ondragend = () => handleDragEnd(wrapper);
+                wrapper.ondragover = (e) => e.preventDefault();
+                wrapper.ondrop = () => handleDrop(p.id);
                 wrapper.innerHTML = `
                     <div class="row-number">${index + 1}</div>
-                    <div class="player-card" onclick="openModal('${p.id}')">
-                        <div class="card-content">
+                    <div class="player-card">
+                        <div class="card-content" onclick="openModal('${p.id}')">
                             <div class="card-header">
                                 <span class="pos-badge" style="background:${POS_COLORS[p.pos] || '#999'}">${p.pos}</span>
                                 <span class="player-name">${p.name} ${activeTab === 'players' ? `(${p.score}分)` : ''}</span>
                             </div>
                             <div class="card-footer">DC: ${p.dcName} | ${p.note}</div>
+                        </div>
+                        <div class="card-actions">
+                            <span class="drag-handle">⠿</span>
+                            <button class="edit-btn" onclick="openModal('${p.id}')">⋮</button>
                         </div>
                     </div>
                 `;
@@ -133,48 +144,35 @@
         :root { --bg-color: #0a1219; --card-bg: #111e2a; --text-color: #e6edf3; --accent: #61dafb; --input-bg: #182633; }
         body { font-family: 'Segoe UI', sans-serif; background: var(--bg-color); color: var(--text-color); padding: 20px; box-sizing: border-box; }
         .container { max-width: 600px; margin: 0 auto; padding-bottom: 100px; }
-        .header { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
-        .logo { width: 50px; height: 50px; object-fit: cover; border-radius: 8px; border: 1px solid #2d455c; }
+        .list-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; cursor: grab; transition: opacity 0.2s; }
+        .list-row.dragging { opacity: 0.5; cursor: grabbing; }
+        .row-number { width: 30px; font-weight: bold; color: #8892b0; text-align: center; }
+        .player-card { background: var(--card-bg); padding: 12px 16px; flex: 1; border-radius: 12px; display: flex; align-items: center; border: 1px solid #2d455c; }
+        .card-content { flex: 1; cursor: pointer; }
+        .card-actions { display: flex; align-items: center; gap: 10px; }
+        .drag-handle { color: #4a5568; font-size: 1.2rem; cursor: grab; }
+        .edit-btn { background: none; border: none; color: #8892b0; font-size: 1.5rem; cursor: pointer; }
         .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
         .tab-btn { flex: 1; padding: 12px; background: #162431; border: 1px solid #2d455c; color: #8892b0; cursor: pointer; border-radius: 8px; font-weight: bold; }
         .tab-btn.active { background: var(--accent); color: #0a1219; }
-        .search-box { width: 100%; padding: 14px; margin-bottom: 20px; background: var(--input-bg); border: 1px solid #2d455c; border-radius: 8px; color: white; box-sizing: border-box; }
-        
-        .list-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-        .row-number { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; background: #162431; border-radius: 50%; color: #8892b0; font-weight: bold; font-size: 0.9rem; flex-shrink: 0; }
-        
-        .player-card { background: var(--card-bg); padding: 16px; flex: 1; border-radius: 12px; display: flex; align-items: center; border: 1px solid #2d455c; cursor: pointer; }
-        .card-content { flex: 1; overflow: hidden; }
-        .card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-        .pos-badge { padding: 2px 6px; border-radius: 4px; color: #fff; font-size: 0.7rem; font-weight: bold; }
-        .player-name { font-weight: bold; font-size: 1rem; }
-        .card-footer { font-size: 0.85rem; color: #8892b0; }
-        
+        .search-box { width: 100%; padding: 14px; margin-bottom: 20px; background: var(--input-bg); border: 1px solid #2d455c; border-radius: 8px; color: white; }
         .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(10,18,25,0.9); justify-content: center; align-items: center; z-index: 100; }
         .modal-content { background: var(--card-bg); padding: 25px; border-radius: 16px; width: 90%; max-width: 400px; border: 1px solid #2d455c; }
-        .form-group { margin-bottom: 15px; }
-        .form-group label { display: block; margin-bottom: 5px; color: #8892b0; font-size: 0.9rem; }
-        input, textarea { width: 100%; padding: 10px; border: 1px solid #2d455c; border-radius: 6px; background: var(--input-bg); color: white; box-sizing: border-box; }
-        
         .pos-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
         .pos-option { padding: 8px 0; border: 2px solid #2d455c; background: #162431; color: #8892b0; border-radius: 6px; cursor: pointer; font-weight: bold; }
         .pos-option.active { border-color: var(--accent); color: #fff; }
-        
         .fab { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 500px; padding: 16px; background: var(--accent); color: #0a1219; border: none; border-radius: 50px; font-weight: bold; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-        .btn-del { background: #ff4d4f !important; color: white !important; }
+        .btn-del { background: #ff4d4f !important; color: white !important; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <img src="https://i.pinimg.com/736x/d1/b1/1d/d1b11d5e4dbae547ac0d651476cec488.jpg" alt="Logo" class="logo">
-            <h1>玩家統計系統</h1>
-        </div>
+        <h1>玩家統計系統</h1>
         <div class="tabs">
             <button class="tab-btn active" data-tab="players" onclick="switchTab('players')">名人榜</button>
             <button class="tab-btn" data-tab="trash" onclick="switchTab('trash')">畜生名單</button>
         </div>
-        <input type="text" class="search-box" placeholder="🔍 搜尋 ID 或 DC..." oninput="updateSearch(this.value)">
+        <input type="text" class="search-box" placeholder="🔍 搜尋..." oninput="updateSearch(this.value)">
         <div id="playerList"></div>
     </div>
     <button class="fab" onclick="openModal()">+ 新增玩家</button>
@@ -182,9 +180,9 @@
         <div class="modal-content">
             <h2 style="margin-top:0; color:#fff;">編輯資料</h2>
             <input type="hidden" id="editId">
-            <div class="form-group"><label>遊戲 ID</label><input type="text" id="name"></div>
-            <div class="form-group"><label>DC 名稱</label><input type="text" id="dcName"></div>
-            <div class="form-group"><label>位置</label>
+            <div style="margin-bottom:15px;"><label>遊戲 ID</label><input type="text" id="name" style="width:100%; padding:10px; background:#182633; border:1px solid #2d455c; color:white; border-radius:6px;"></div>
+            <div style="margin-bottom:15px;"><label>DC 名稱</label><input type="text" id="dcName" style="width:100%; padding:10px; background:#182633; border:1px solid #2d455c; color:white; border-radius:6px;"></div>
+            <div style="margin-bottom:15px;"><label>位置</label>
                 <div class="pos-grid">
                     <button class="pos-option" data-pos="MID" onclick="selectPos('MID')" style="color:#ff4d4f">MID</button>
                     <button class="pos-option" data-pos="TOP" onclick="selectPos('TOP')" style="color:#9747FF">TOP</button>
@@ -193,10 +191,10 @@
                     <button class="pos-option" data-pos="SUP" onclick="selectPos('SUP')" style="color:#3B82F6">SUP</button>
                 </div>
             </div>
-            <div class="form-group"><label>實力分數</label><input type="number" id="score"></div>
-            <div class="form-group"><label>備註</label><textarea id="note"></textarea></div>
-            <div style="display:flex; justify-content:space-between; gap:10px;">
-                <button id="delBtn" class="btn-del" onclick="deleteCurrentPlayer()" style="padding:10px 20px; border:none; border-radius:6px; cursor:pointer;">刪除</button>
+            <div style="margin-bottom:15px;"><label>實力分數</label><input type="number" id="score" style="width:100%; padding:10px; background:#182633; border:1px solid #2d455c; color:white; border-radius:6px;"></div>
+            <div style="margin-bottom:15px;"><label>備註</label><textarea id="note" style="width:100%; padding:10px; background:#182633; border:1px solid #2d455c; color:white; border-radius:6px;"></textarea></div>
+            <div style="display:flex; justify-content:space-between;">
+                <button id="delBtn" class="btn-del" onclick="deleteCurrentPlayer()">刪除</button>
                 <div style="display:flex; gap:10px;">
                     <button onclick="closeModal()" style="padding:10px 20px; background:#2d455c; border:none; border-radius:6px; color:#fff; cursor:pointer;">取消</button>
                     <button onclick="savePlayer()" style="padding:10px 20px; background:var(--accent); border:none; border-radius:6px; color:#000; font-weight:bold; cursor:pointer;">儲存</button>
