@@ -30,7 +30,8 @@
         const auth = getAuth(app);
 
         const POS_COLORS = { MID: '#ff4d4f', TOP: '#9747FF', AD: '#F59E0B', JG: '#10B981', SUP: '#EC4899' };
-        let activeTab = 'trash'; // 預設開啟畜生名單
+        
+        let activeTab = 'players'; // 預設開啟評級榜
         let searchQuery = '';
         let activeView = 'tier'; 
         let dataStore = { players: [], trash: [] };
@@ -38,7 +39,9 @@
         let sortableInstances = [];
         let sortableListInstance = null;
         let isEditMode = false;
-        let isPlayersTabUnlocked = false; 
+        
+        // 從 LocalStorage 讀取解鎖狀態
+        let isPlayersTabUnlocked = localStorage.getItem('isUnlocked') === 'true'; 
 
         const getCol = (col) => collection(db, 'artifacts', appId, 'public', 'data', col);
 
@@ -127,14 +130,35 @@
         window.showPasswordModal = () => document.getElementById('passwordModal').style.display = 'flex';
         window.closePasswordModal = () => document.getElementById('passwordModal').style.display = 'none';
 
+        window.togglePasswordVisibility = () => {
+            const pwdInput = document.getElementById('passwordInput');
+            const toggleBtn = document.getElementById('togglePasswordBtn');
+            if (pwdInput.type === 'password') {
+                pwdInput.type = 'text';
+                toggleBtn.innerText = '🙈';
+            } else {
+                pwdInput.type = 'password';
+                toggleBtn.innerText = '👁️';
+            }
+        };
+
+        window.checkCapsLock = (e) => {
+            const warning = document.getElementById('capsLockWarning');
+            if (e.getModifierState && e.getModifierState('CapsLock')) {
+                warning.style.display = 'block';
+            } else {
+                warning.style.display = 'none';
+            }
+        };
+
         window.verifyPassword = () => {
             const pwd = document.getElementById('passwordInput').value;
             if (pwd === 'GodCloud') {
                 isPlayersTabUnlocked = true;
+                localStorage.setItem('isUnlocked', 'true');
                 closePasswordModal();
                 render();
             } else {
-                // 因環境嚴禁使用 alert()，改為直接在輸入框顯示錯誤提示，不影響原本 UI
                 const input = document.getElementById('passwordInput');
                 input.value = '';
                 input.placeholder = '密碼錯誤！';
@@ -195,7 +219,6 @@
             else await addDoc(getCol(activeTab), { ...data, order: dataStore[activeTab].length });
         };
 
-        // 補上遺漏的刪除玩家功能，使按鈕能正常作用
         window.deletePlayer = async () => {
             const id = document.getElementById('editId').value;
             if (id) {
@@ -210,7 +233,6 @@
             const lockOverlay = document.getElementById('lockOverlay');
             const listContainer = document.querySelector('.list-container');
 
-            // 鎖定顯示邏輯：加上動態高度限制，避免列表過長/過短導致鎖頭 UI 歪掉跑位
             if (activeTab === 'players' && !isPlayersTabUnlocked) {
                 lockOverlay.style.display = 'flex';
                 listContainer.style.minHeight = '500px';
@@ -271,7 +293,6 @@
                     row.dataset.id = p.id;
                     const posHtml = (Array.isArray(p.pos) ? p.pos : [p.pos || 'TOP']).map(pos => `<span class="pos-badge" style="background:${POS_COLORS[pos] || '#999'}">${pos}</span>`).join('');
                     
-                    // 根據分數計算顯示的評級與顏色
                     const s = p.score || 0;
                     const rankLabel = s >= 105 ? 'S+' : s >= 90 ? 'S' : s >= 75 ? 'A' : s >= 60 ? 'B' : s >= 45 ? 'C' : 'D';
                     const tierColor = s >= 105 ? '#ff4d4f' : s >= 90 ? '#ff7f7f' : s >= 75 ? '#ffbf7f' : s >= 60 ? '#ffff7f' : s >= 45 ? '#bf7fff' : '#80d4ff';
@@ -297,7 +318,6 @@
             }
         }
         
-        // 初始自動登入
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
             signInWithCustomToken(auth, __initial_auth_token).catch(() => signInAnonymously(auth));
         } else {
@@ -307,12 +327,10 @@
     <style>
         :root { --bg-color: #0a1219; --card-bg: #111e2a; --text-color: #e6edf3; --accent: #61dafb; --input-bg: #182633; }
         body { font-family: 'Segoe UI', sans-serif; background: var(--bg-color); color: var(--text-color); padding: 20px; box-sizing: border-box; }
-        .container { max-width: 800px; margin: 0 auto; padding-bottom: 100px; position: relative; }
         /* 霧面遮罩樣式 */
-        .lock-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 90; display: none; justify-content: center; align-items: center; background: rgba(10,18,25,0.6); backdrop-filter: blur(10px); border-radius: 16px; flex-direction: column; gap: 15px; }
+        .lock-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 90; display: none; justify-content: center; align-items: center; background: rgba(10,18,25,0.2); backdrop-filter: blur(10px); border-radius: 16px; flex-direction: column; gap: 15px; }
         .lock-icon { font-size: 3rem; }
         .unlock-btn { padding: 12px 24px; background: var(--accent); color: #0a1219; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
-
         .header { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
         .logo { width: 50px; height: 50px; object-fit: cover; border-radius: 8px; border: 1px solid #2d455c; }
         .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
@@ -370,8 +388,8 @@
             <h1>玩家統計系統</h1>
         </div>
         <div class="tabs">
-            <button class="tab-btn" data-tab="players" onclick="switchTab('players')">評級榜</button>
-            <button class="tab-btn active" data-tab="trash" onclick="switchTab('trash')">畜生名單</button>
+            <button class="tab-btn active" data-tab="players" onclick="switchTab('players')">評級榜</button>
+            <button class="tab-btn" data-tab="trash" onclick="switchTab('trash')">畜生名單</button>
         </div>
         <div class="search-row">
             <input type="text" class="search-box" placeholder="🔍 搜尋 ID 或 DC..." oninput="updateSearch(this.value)">
@@ -390,7 +408,6 @@
             </div>
         </div>
         <div class="list-container">
-            <!-- 霧面遮罩，現在移到這裡，只遮蓋評分區/列表區 -->
             <div id="lockOverlay" class="lock-overlay">
                 <div class="lock-icon">🔒</div>
                 <p>評級榜已上鎖</p>
@@ -398,10 +415,7 @@
             </div>
 
             <div id="listNormal" style="display: none; width: 100%;">
-                <div class="normal-list-view-layout">
-                    <div id="numberColumn" class="number-column"></div>
-                    <div id="playerList" class="player-list-container"></div>
-                </div>
+                <div id="playerList" class="player-list-container"></div>
             </div>
             <div id="tierList" class="tier-list-container">
                 <div class="tier-row"><div class="tier-header tier-t0">S+</div><div id="tier-T0" class="tier-content" data-tier="T0"></div></div>
@@ -419,7 +433,11 @@
     <div class="modal" id="passwordModal" style="z-index: 3000;">
         <div class="modal-content" style="text-align: center;">
             <h2 style="margin-top:0; color:#fff;">請輸入密碼</h2>
-            <div class="form-group"><input type="password" id="passwordInput" placeholder="輸入密碼..." style="text-align: center; font-size: 1.1rem; padding: 12px;"></div>
+            <div class="form-group" style="position: relative;">
+                <input type="password" id="passwordInput" placeholder="輸入密碼..." style="text-align: center; font-size: 1.1rem; padding: 12px; padding-right: 40px; box-sizing: border-box;" onkeyup="checkCapsLock(event)" onclick="checkCapsLock(event)">
+                <button id="togglePasswordBtn" onclick="togglePasswordVisibility()" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; font-size: 1.2rem; cursor: pointer; padding: 0;">👁️</button>
+            </div>
+            <div id="capsLockWarning" style="color: #ff4d4f; font-size: 0.85rem; font-weight: bold; display: none; margin-top: -5px; margin-bottom: 10px;">⚠️ 注意：大寫鎖定 (Caps Lock) 已開啟</div>
             <div style="display:flex; justify-content:center; gap:10px; margin-top: 20px;">
                 <button onclick="closePasswordModal()" style="padding:10px 20px; background:#2d455c; border:none; border-radius:6px; color:#fff; cursor:pointer;">取消</button>
                 <button onclick="verifyPassword()" style="padding:10px 20px; background:var(--accent); border:none; border-radius:6px; color:#000; font-weight:bold; cursor:pointer;">確認</button>
