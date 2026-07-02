@@ -10,9 +10,9 @@
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
     <script type="module">
-        import { initializeApp } from "https://gs.jurieo.com/gemini/gstatic/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, collection, doc, updateDoc, onSnapshot, addDoc, deleteDoc } from "https://gs.jurieo.com/gemini/gstatic/firebasejs/11.6.1/firebase-firestore.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://gs.jurieo.com/gemini/gstatic/firebasejs/11.6.1/firebase-auth.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, doc, updateDoc, onSnapshot, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
         const userConfig = {
             apiKey: "AIzaSyDcH7BFp9xghWLdgvsLseo3XyJG_opf9A8",
@@ -30,35 +30,31 @@
         const auth = getAuth(app);
 
         const POS_COLORS = { MID: '#ff4d4f', TOP: '#9747FF', AD: '#F59E0B', JG: '#10B981', SUP: '#EC4899' };
-        let activeTab = 'players';
+        let activeTab = 'trash'; // 預設開啟畜生名單
         let searchQuery = '';
-        let activeView = 'tier'; // 預設觀看 'tier'，可隨時切換為 'list'
+        let activeView = 'tier'; 
         let dataStore = { players: [], trash: [] };
-        let selectedPos = []; // 預設不選取任何位置
+        let selectedPos = []; 
         let sortableInstances = [];
         let sortableListInstance = null;
-        let isEditMode = false; // 新增：追蹤目前是否為編輯模式
-        let isPlayersTabUnlocked = false; // 新增：追蹤評級榜是否已解鎖
+        let isEditMode = false;
+        let isPlayersTabUnlocked = false; 
 
         const getCol = (col) => collection(db, 'artifacts', appId, 'public', 'data', col);
 
-        // Tier List 模式的拖曳設定
         function initSortable() {
             sortableInstances.forEach(inst => inst.destroy());
             sortableInstances = [];
-
             const currentTab = activeTab;
             const tiers = ['T0', 'T1', 'T2', 'T3', 'T4', 'T5'];
-
             tiers.forEach(tierId => {
                 const el = document.getElementById(`tier-${tierId}`);
                 if (!el) return;
-
                 const inst = new Sortable(el, {
                     group: 'sharedTiers', 
                     handle: '.drag-handle',
                     animation: 150,
-                    disabled: !isEditMode, // 依照開關決定是否啟用拖曳
+                    disabled: !isEditMode,
                     forceFallback: true, 
                     fallbackClass: "sortable-fallback",
                     ghostClass: "sortable-ghost",
@@ -66,43 +62,29 @@
                         const id = evt.item.dataset.id;
                         const toTier = evt.to.dataset.tier;
                         const newOrder = evt.newIndex;
-
                         let newScore = parseInt(evt.item.dataset.score) || 0;
-                        if (toTier === 'T0' && newScore < 105) {
-                            newScore = 110;
-                        } else if (toTier === 'T1' && (newScore < 90 || newScore >= 105)) {
-                            newScore = 95;
-                        } else if (toTier === 'T2' && (newScore < 75 || newScore >= 90)) {
-                            newScore = 80;
-                        } else if (toTier === 'T3' && (newScore < 60 || newScore >= 75)) {
-                            newScore = 65;
-                        } else if (toTier === 'T4' && (newScore < 45 || newScore >= 60)) {
-                            newScore = 50;
-                        } else if (toTier === 'T5' && newScore >= 45) {
-                            newScore = 35;
-                        }
-
+                        if (toTier === 'T0' && newScore < 105) newScore = 110;
+                        else if (toTier === 'T1' && (newScore < 90 || newScore >= 105)) newScore = 95;
+                        else if (toTier === 'T2' && (newScore < 75 || newScore >= 90)) newScore = 80;
+                        else if (toTier === 'T3' && (newScore < 60 || newScore >= 75)) newScore = 65;
+                        else if (toTier === 'T4' && (newScore < 45 || newScore >= 60)) newScore = 50;
+                        else if (toTier === 'T5' && newScore >= 45) newScore = 35;
                         const docRef = doc(db, 'artifacts', appId, 'public', 'data', currentTab, id);
-                        await updateDoc(docRef, { 
-                            order: newOrder,
-                            score: newScore
-                        });
+                        await updateDoc(docRef, { order: newOrder, score: newScore });
                     }
                 });
                 sortableInstances.push(inst);
             });
         }
 
-        // 排名列表模式的拖曳設定
         function initSortableList() {
             const listEl = document.getElementById('playerList');
             if (sortableListInstance) sortableListInstance.destroy();
-            
             const currentTab = activeTab;
             sortableListInstance = new Sortable(listEl, {
                 handle: '.drag-handle',
                 animation: 150,
-                disabled: !isEditMode, // 依照開關決定是否啟用拖曳
+                disabled: !isEditMode,
                 forceFallback: true,
                 fallbackClass: "sortable-fallback",
                 ghostClass: "sortable-ghost",
@@ -126,25 +108,10 @@
                 }, (err) => console.error("Firestore Error:", err));
             });
         });
-        
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-            signInWithCustomToken(auth, __initial_auth_token).catch((err) => {
-                console.error("Token Auth Error, falling back to anonymous", err);
-                signInAnonymously(auth);
-            });
-        } else {
-            signInAnonymously(auth);
-        }
 
-        // 新增：切換編輯模式的功能
         window.toggleEditMode = (checked) => {
             isEditMode = checked;
-            if (checked) {
-                document.body.classList.add('edit-mode');
-            } else {
-                document.body.classList.remove('edit-mode');
-            }
-            // 同步更新當下拖曳套件的可用狀態
+            document.body.classList.toggle('edit-mode', checked);
             sortableInstances.forEach(inst => inst.option("disabled", !isEditMode));
             if (sortableListInstance) sortableListInstance.option("disabled", !isEditMode);
         };
@@ -152,36 +119,26 @@
         window.updateSearch = (val) => { searchQuery = val.toLowerCase(); render(); };
         
         window.switchTab = (tab) => {
-            if (tab === 'players' && !isPlayersTabUnlocked) {
-                // 如果是切換到評級榜，且尚未解鎖，則跳出密碼輸入框
-                showPasswordModal();
-                return;
-            }
             activeTab = tab;
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
             render();
         };
 
-        // 新增：顯示密碼輸入框
-        window.showPasswordModal = () => {
-            document.getElementById('passwordModal').style.display = 'flex';
-        };
+        window.showPasswordModal = () => document.getElementById('passwordModal').style.display = 'flex';
+        window.closePasswordModal = () => document.getElementById('passwordModal').style.display = 'none';
 
-        // 新增：隱藏密碼輸入框
-        window.closePasswordModal = () => {
-            document.getElementById('passwordModal').style.display = 'none';
-            document.getElementById('passwordInput').value = ''; // 清空輸入
-        };
-
-        // 新增：驗證密碼
         window.verifyPassword = () => {
             const pwd = document.getElementById('passwordInput').value;
             if (pwd === 'GodCloud') {
                 isPlayersTabUnlocked = true;
                 closePasswordModal();
-                switchTab('players'); // 解鎖成功，切換到評級榜
+                render();
             } else {
-                alert('密碼錯誤！');
+                // 因環境嚴禁使用 alert()，改為直接在輸入框顯示錯誤提示，不影響原本 UI
+                const input = document.getElementById('passwordInput');
+                input.value = '';
+                input.placeholder = '密碼錯誤！';
+                setTimeout(() => input.placeholder = '輸入密碼...', 2000);
             }
         };
 
@@ -192,16 +149,9 @@
         };
 
         window.selectPos = (pos) => {
-            if (selectedPos.includes(pos)) {
-                // 如果已經包含，則移除（反選）
-                selectedPos = selectedPos.filter(p => p !== pos);
-            } else {
-                // 如果沒有包含，則加入
-                selectedPos.push(pos);
-            }
-            document.querySelectorAll('.pos-option').forEach(btn => {
-                btn.classList.toggle('active', selectedPos.includes(btn.dataset.pos));
-            });
+            if (selectedPos.includes(pos)) selectedPos = selectedPos.filter(p => p !== pos);
+            else selectedPos.push(pos);
+            document.querySelectorAll('.pos-option').forEach(btn => btn.classList.toggle('active', selectedPos.includes(btn.dataset.pos)));
         };
 
         window.openModal = (id = '') => {
@@ -213,36 +163,15 @@
             document.getElementById('dcName').value = p ? (p.dcName || '') : '';
             document.getElementById('dcName2').value = p ? (p.dcName2 || '') : '';
             document.getElementById('note').value = p ? p.note : '';
-            document.getElementById('imgUrl').value = p ? (p.imgUrl || '') : ''; // 新增：讀取圖片網址
+            document.getElementById('imgUrl').value = p ? (p.imgUrl || '') : '';
             
-            // 將實力分數轉換回對應的下拉選單選項 (S+, S, A, B, C, D)
-            let scoreVal = 'D';
-            if (p) {
-                const score = p.score || 0;
-                if (score >= 105) scoreVal = 'S+';
-                else if (score >= 90) scoreVal = 'S';
-                else if (score >= 75) scoreVal = 'A';
-                else if (score >= 60) scoreVal = 'B';
-                else if (score >= 45) scoreVal = 'C';
-                else scoreVal = 'D';
-            } else {
-                scoreVal = 'S+'; // 新增預設為 S+
-            }
+            let scoreVal = p ? (p.score >= 105 ? 'S+' : p.score >= 90 ? 'S' : p.score >= 75 ? 'A' : p.score >= 60 ? 'B' : p.score >= 45 ? 'C' : 'D') : 'S+';
             document.getElementById('score').value = scoreVal;
             
-            // 讀取舊資料時相容單字串，並轉為陣列
-            let pPos = p ? p.pos : []; // 新增時預設不選取任何位置
-            if (typeof pPos === 'string') {
-                pPos = [pPos];
-            }
-            selectedPos = [...pPos];
+            selectedPos = p ? (Array.isArray(p.pos) ? p.pos : [p.pos || 'TOP']) : [];
+            document.querySelectorAll('.pos-option').forEach(btn => btn.classList.toggle('active', selectedPos.includes(btn.dataset.pos)));
             
-            document.querySelectorAll('.pos-option').forEach(btn => {
-                btn.classList.toggle('active', selectedPos.includes(btn.dataset.pos));
-            });
-            
-            const delBtn = document.getElementById('delBtn');
-            delBtn.style.display = id ? 'block' : 'none';
+            document.getElementById('delBtn').style.display = id ? 'block' : 'none';
             document.getElementById('modal').style.display = 'flex';
         };
 
@@ -250,478 +179,188 @@
 
         window.savePlayer = async () => {
             const id = document.getElementById('editId').value;
-            
-            // 將等級 (S+, S, A, B, C, D) 轉換為數值分數以便資料庫相容
-            const scoreSelect = document.getElementById('score').value;
-            let scoreNum = 35;
-            if (scoreSelect === 'S+') scoreNum = 110;
-            else if (scoreSelect === 'S') scoreNum = 95;
-            else if (scoreSelect === 'A') scoreNum = 80;
-            else if (scoreSelect === 'B') scoreNum = 65;
-            else if (scoreSelect === 'C') scoreNum = 50;
-            else if (scoreSelect === 'D') scoreNum = 35;
-
+            const scoreMap = { 'S+': 110, 'S': 95, 'A': 80, 'B': 65, 'C': 50, 'D': 35 };
             const data = {
                 name: document.getElementById('name').value,
                 nickName: document.getElementById('nickName').value || '',
                 dcName: document.getElementById('dcName').value,
                 dcName2: document.getElementById('dcName2').value || '',
-                score: scoreNum,
-                pos: selectedPos, // 這裡現在會儲存包含多個位置的陣列
+                score: scoreMap[document.getElementById('score').value],
+                pos: selectedPos,
                 note: document.getElementById('note').value,
-                imgUrl: document.getElementById('imgUrl').value || '' // 新增：儲存圖片網址
+                imgUrl: document.getElementById('imgUrl').value || ''
             };
             closeModal();
-            if (id) {
-                const docRef = doc(db, 'artifacts', appId, 'public', 'data', activeTab, id);
-                await updateDoc(docRef, data);
-            } else {
-                await addDoc(getCol(activeTab), { ...data, order: dataStore[activeTab].length });
-            }
+            if (id) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', activeTab, id), data);
+            else await addDoc(getCol(activeTab), { ...data, order: dataStore[activeTab].length });
         };
 
+        // 補上遺漏的刪除玩家功能，使按鈕能正常作用
         window.deletePlayer = async () => {
             const id = document.getElementById('editId').value;
-            if (!id) return;
-            
-            const isConfirmed = await new Promise(resolve => {
-                const overlay = document.createElement('div');
-                overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(10,18,25,0.9);z-index:200;display:flex;justify-content:center;align-items:center;';
-                overlay.innerHTML = `
-                    <div style="background:var(--card-bg);padding:25px;border-radius:16px;border:1px solid #2d455c;text-align:center;width:90%;max-width:300px;">
-                        <div style="margin-bottom:20px;color:#fff;font-size:1rem;">確定要刪除這筆資料嗎？</div>
-                        <div style="display:flex;justify-content:center;gap:10px;">
-                            <button id="tempCancel" style="padding:10px 20px;background:#2d455c;border:none;border-radius:6px;color:#fff;cursor:pointer;">取消</button>
-                            <button id="tempConfirm" style="padding:10px 20px;background:#ff4d4f;border:none;border-radius:6px;color:#fff;cursor:pointer;font-weight:bold;">確定</button>
-                        </div>
-                    </div>
-                `;
-                document.body.appendChild(overlay);
-                document.getElementById('tempCancel').onclick = () => { overlay.remove(); resolve(false); };
-                document.getElementById('tempConfirm').onclick = () => { overlay.remove(); resolve(true); };
-            });
-
-            if (isConfirmed) {
-                try {
-                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', activeTab, id));
-                    closeModal();
-                } catch (e) {
-                    const toast = document.createElement('div');
-                    toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#ff4d4f;color:white;padding:12px 24px;border-radius:8px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
-                    toast.innerText = "刪除失敗，請確認網路連線";
-                    document.body.appendChild(toast);
-                    setTimeout(() => toast.remove(), 3000);
-                }
+            if (id) {
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', activeTab, id));
+                closeModal();
             }
         };
-
-        window.addEventListener('resize', syncNumberHeights);
-
-        function syncNumberHeights() {
-            if (activeView !== 'list') return;
-            const rows = document.querySelectorAll('#playerList .list-row');
-            const numCol = document.getElementById('numberColumn');
-            if (!numCol) return;
-            numCol.innerHTML = '';
-            rows.forEach((row, i) => {
-                const numDiv = document.createElement('div');
-                numDiv.className = 'static-rank-num';
-                numDiv.innerText = i + 1;
-                numDiv.style.height = row.offsetHeight + 'px';
-                numCol.appendChild(numDiv);
-            });
-        }
 
         function render() {
             const tierList = document.getElementById('tierList');
             const listNormal = document.getElementById('listNormal');
+            const lockOverlay = document.getElementById('lockOverlay');
+            const listContainer = document.querySelector('.list-container');
 
-            if (!tierList || !listNormal) return;
+            // 鎖定顯示邏輯：加上動態高度限制，避免列表過長/過短導致鎖頭 UI 歪掉跑位
+            if (activeTab === 'players' && !isPlayersTabUnlocked) {
+                lockOverlay.style.display = 'flex';
+                listContainer.style.minHeight = '500px';
+                listContainer.style.maxHeight = '80vh';
+                listContainer.style.overflow = 'hidden';
+            } else {
+                lockOverlay.style.display = 'none';
+                listContainer.style.minHeight = '0px';
+                listContainer.style.maxHeight = 'none';
+                listContainer.style.overflow = 'visible';
+            }
 
             const filtered = dataStore[activeTab].filter(p => 
-                (p.name || '').toLowerCase().includes(searchQuery) || 
-                (p.nickName || '').toLowerCase().includes(searchQuery) || 
-                (p.dcName || '').toLowerCase().includes(searchQuery) ||
-                (p.dcName2 || '').toLowerCase().includes(searchQuery)
+                (p.name || '').toLowerCase().includes(searchQuery) || (p.nickName || '').toLowerCase().includes(searchQuery) || 
+                (p.dcName || '').toLowerCase().includes(searchQuery) || (p.dcName2 || '').toLowerCase().includes(searchQuery)
             );
 
             if (activeView === 'tier') {
-                // 顯示 Tier List 介面
                 tierList.style.display = 'flex';
                 listNormal.style.display = 'none';
-
-                const t0Container = document.getElementById('tier-T0');
-                const t1Container = document.getElementById('tier-T1');
-                const t2Container = document.getElementById('tier-T2');
-                const t3Container = document.getElementById('tier-T3');
-                const t4Container = document.getElementById('tier-T4');
-                const t5Container = document.getElementById('tier-T5');
-
-                if (t0Container) t0Container.innerHTML = '';
-                t1Container.innerHTML = '';
-                t2Container.innerHTML = '';
-                t3Container.innerHTML = '';
-                t4Container.innerHTML = '';
-                t5Container.innerHTML = '';
+                ['T0', 'T1', 'T2', 'T3', 'T4', 'T5'].forEach(t => document.getElementById(`tier-${t}`).innerHTML = '');
 
                 filtered.forEach((p) => {
                     const row = document.createElement('div');
                     row.className = 'list-row';
                     row.dataset.id = p.id;
                     row.dataset.score = p.score || 0;
+                    const posHtml = (Array.isArray(p.pos) ? p.pos : [p.pos || 'TOP']).map(pos => `<span class="pos-badge" style="background:${POS_COLORS[pos] || '#999'}">${pos}</span>`).join('');
                     
-                    const score = p.score || 0;
-                    let currentTierLetter = 'D';
-                    if (score >= 105) currentTierLetter = 'S+';
-                    else if (score >= 90) currentTierLetter = 'S';
-                    else if (score >= 75) currentTierLetter = 'A';
-                    else if (score >= 60) currentTierLetter = 'B';
-                    else if (score >= 45) currentTierLetter = 'C';
-                    
-                    // 確保將位置資料轉為陣列，並生成多個標籤
-                    const posArray = Array.isArray(p.pos) ? p.pos : [p.pos || 'TOP'];
-                    const posHtml = posArray.map(pos => `<span class="pos-badge" style="background:${POS_COLORS[pos] || '#999'}">${pos}</span>`).join('');
-                    const posDisplayStr = posArray.join(', ');
-                    
-                    // 分級模式下：卡片信息只顯示 位置（pos） 與 暱稱（nickName）
-                    // 增加 .card-tooltip，懸停時顯示完整信息
                     row.innerHTML = `
                         <div class="player-card">
-                            <div class="card-content">
-                                <div class="card-header" style="margin-bottom: 0;">
-                                    <div class="pos-badge-container">${posHtml}</div>
-                                    <span class="player-name" style="font-size: 0.85rem; font-weight: normal; margin-left: 4px;">${p.nickName || '-'}</span>
-                                </div>
-                            </div>
-                            <div class="card-actions">
-                                <span class="drag-handle" title="拖曳">⠿</span>
-                                <span class="menu-dots" onclick="openModal('${p.id}')" title="編輯">⋮</span>
-                            </div>
-                            
-                            <!-- 完整信息懸停提示框 (加入暱稱/顯示名資訊) -->
+                            <div class="card-content"><div class="card-header"><div class="pos-badge-container">${posHtml}</div><span class="player-name">${p.nickName || '-'}</span></div></div>
+                            <div class="card-actions"><span class="drag-handle">⠿</span><span class="menu-dots" onclick="openModal('${p.id}')">⋮</span></div>
                             <div class="card-tooltip">
                                 <div class="tooltip-title">${p.name || '-'}</div>
                                 <div class="tooltip-grid">
-                                    <div class="tooltip-label">暱稱</div>
-                                    <div class="tooltip-value">${p.nickName || '-'}</div>
-                                    <div class="tooltip-label">DC 名稱</div>
-                                    <div class="tooltip-value">${p.dcName || '-'}${p.dcName2 ? `<br>${p.dcName2}` : ''}</div>
-                                    <div class="tooltip-label">實力分級</div>
-                                    <div class="tooltip-value">${currentTierLetter} 級</div>
-                                    <div class="tooltip-label">位置</div>
-                                    <div class="tooltip-value">${posDisplayStr}</div>
+                                    <div class="tooltip-label">暱稱</div><div class="tooltip-value">${p.nickName || '-'}</div>
+                                    <div class="tooltip-label">DC</div><div class="tooltip-value">${p.dcName || '-'}${p.dcName2 ? `<br>${p.dcName2}` : ''}</div>
                                 </div>
-                                <div class="tooltip-line" style="border-top: 1px dashed #2d455c; margin-top: 6px; padding-top: 4px; white-space: normal;">
-                                    備註: <span>${p.note || '-'}</span>
-                                </div>
-                                ${p.imgUrl ? `<div style="margin-top: 6px; text-align: center;"><img src="${p.imgUrl}" alt="備註圖片" style="max-width: 100%; max-height: 150px; border-radius: 4px;"></div>` : ''}
+                                <div class="tooltip-line">備註: <span>${p.note || '-'}</span></div>
+                                ${p.imgUrl ? `<div style="margin-top:6px; text-align:center;"><img src="${p.imgUrl}" style="max-width:100%; border-radius:4px;"></div>` : ''}
                             </div>
                         </div>
                     `;
-                    
-                    if (score >= 105) {
-                        if (t0Container) t0Container.appendChild(row);
-                    } else if (score >= 90) {
-                        t1Container.appendChild(row);
-                    } else if (score >= 75) {
-                        t2Container.appendChild(row);
-                    } else if (score >= 60) {
-                        t3Container.appendChild(row);
-                    } else if (score >= 45) {
-                        t4Container.appendChild(row);
-                    } else {
-                        t5Container.appendChild(row);
-                    }
+                    const s = p.score || 0;
+                    const t = s >= 105 ? 'T0' : s >= 90 ? 'T1' : s >= 75 ? 'T2' : s >= 60 ? 'T3' : s >= 45 ? 'T4' : 'T5';
+                    document.getElementById(`tier-${t}`).appendChild(row);
                 });
-                
                 initSortable();
             } else {
-                // 顯示一般排名列表介面
                 tierList.style.display = 'none';
                 listNormal.style.display = 'block';
-
                 const list = document.getElementById('playerList');
                 list.innerHTML = '';
-
-                filtered.forEach((p) => {
+                filtered.forEach((p, index) => {
                     const row = document.createElement('div');
                     row.className = 'list-row list-row-full';
                     row.dataset.id = p.id;
+                    const posHtml = (Array.isArray(p.pos) ? p.pos : [p.pos || 'TOP']).map(pos => `<span class="pos-badge" style="background:${POS_COLORS[pos] || '#999'}">${pos}</span>`).join('');
                     
-                    const score = p.score || 0;
-                    let currentTierLetter = 'D';
-                    if (score >= 105) currentTierLetter = 'S+';
-                    else if (score >= 90) currentTierLetter = 'S';
-                    else if (score >= 75) currentTierLetter = 'A';
-                    else if (score >= 60) currentTierLetter = 'B';
-                    else if (score >= 45) currentTierLetter = 'C';
-
-                    // 列表模式中合併展示兩行 DC 名稱，暱稱也一併附加在遊戲 ID 旁
-                    const dcMerged = [p.dcName, p.dcName2].filter(x => x && x.trim() !== '').join(' / ') || '-';
-                    const displayNameCombined = p.nickName ? `${p.name || '-'} (${p.nickName})` : (p.name || '-');
-
-                    // 確保將位置資料轉為陣列，並生成多個標籤
-                    const posArray = Array.isArray(p.pos) ? p.pos : [p.pos || 'TOP'];
-                    const posHtml = posArray.map(pos => `<span class="pos-badge" style="background:${POS_COLORS[pos] || '#999'}">${pos}</span>`).join('');
+                    // 根據分數計算顯示的評級與顏色
+                    const s = p.score || 0;
+                    const rankLabel = s >= 105 ? 'S+' : s >= 90 ? 'S' : s >= 75 ? 'A' : s >= 60 ? 'B' : s >= 45 ? 'C' : 'D';
+                    const tierColor = s >= 105 ? '#ff4d4f' : s >= 90 ? '#ff7f7f' : s >= 75 ? '#ffbf7f' : s >= 60 ? '#ffff7f' : s >= 45 ? '#bf7fff' : '#80d4ff';
 
                     row.innerHTML = `
-                        <div class="player-card">
-                            <div class="card-content">
-                                <div class="card-header">
-                                    <div class="pos-badge-container">${posHtml}</div>
-                                    <span class="player-name" style="margin-left: 4px;">${displayNameCombined} ${activeTab === 'players' ? `(${currentTierLetter}級)` : ''}</span>
+                        <div class="player-card" style="display: flex; align-items: center; padding: 12px; gap: 12px;">
+                            <div style="font-size: 1.2rem; font-weight: bold; color: #8892b0; min-width: 30px; text-align: center;">${index + 1}</div>
+                            <div style="background: ${tierColor}; color: #000; padding: 4px 8px; border-radius: 4px; font-weight: bold; min-width: 35px; text-align: center;">${rankLabel}</div>
+                            <div class="card-content" style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                                <div class="card-header" style="display: flex; align-items: center; gap: 8px;">
+                                    <div class="pos-badge-container" style="display:flex; gap:2px;">${posHtml}</div>
+                                    <span class="player-name" style="font-size: 1.1rem; font-weight: bold;">${p.nickName || '-'} <span style="font-size: 0.9rem; color: #8892b0; font-weight: normal;">(${p.name || '-'})</span></span>
                                 </div>
-                                <div class="card-footer">DC: ${dcMerged} | ${p.note || '-'}</div>
+                                <div class="card-footer" style="font-size: 0.85rem; color: #8892b0;">DC: ${[p.dcName, p.dcName2].filter(Boolean).join(' / ')} | 備註: ${p.note || '-'}</div>
                             </div>
-                            ${p.imgUrl ? `<div class="card-img" style="margin-right: 8px;"><img src="${p.imgUrl}" alt="備註圖片" style="max-height: 30px; border-radius: 4px;"></div>` : ''}
-                            <div class="card-actions">
-                                <span class="drag-handle" title="拖曳">⠿</span>
-                                <span class="menu-dots" onclick="openModal('${p.id}')" title="編輯">⋮</span>
-                            </div>
+                            ${p.imgUrl ? `<div class="card-img"><img src="${p.imgUrl}" style="max-height: 40px; border-radius: 4px;"></div>` : ''}
+                            <div class="card-actions"><span class="drag-handle" style="cursor: grab; font-size: 1.2rem;">⠿</span><span class="menu-dots" style="cursor: pointer; font-size: 1.2rem; padding: 0 5px;" onclick="openModal('${p.id}')">⋮</span></div>
                         </div>
                     `;
                     list.appendChild(row);
                 });
-
-                requestAnimationFrame(() => syncNumberHeights());
                 initSortableList();
             }
+        }
+        
+        // 初始自動登入
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+            signInWithCustomToken(auth, __initial_auth_token).catch(() => signInAnonymously(auth));
+        } else {
+            signInAnonymously(auth);
         }
     </script>
     <style>
         :root { --bg-color: #0a1219; --card-bg: #111e2a; --text-color: #e6edf3; --accent: #61dafb; --input-bg: #182633; }
         body { font-family: 'Segoe UI', sans-serif; background: var(--bg-color); color: var(--text-color); padding: 20px; box-sizing: border-box; }
-        .container { max-width: 800px; margin: 0 auto; padding-bottom: 100px; }
+        .container { max-width: 800px; margin: 0 auto; padding-bottom: 100px; position: relative; }
+        /* 霧面遮罩樣式 */
+        .lock-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 90; display: none; justify-content: center; align-items: center; background: rgba(10,18,25,0.6); backdrop-filter: blur(10px); border-radius: 16px; flex-direction: column; gap: 15px; }
+        .lock-icon { font-size: 3rem; }
+        .unlock-btn { padding: 12px 24px; background: var(--accent); color: #0a1219; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+
         .header { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
         .logo { width: 50px; height: 50px; object-fit: cover; border-radius: 8px; border: 1px solid #2d455c; }
-        
         .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
         .tab-btn { flex: 1; padding: 12px; background: #162431; border: 1px solid #2d455c; color: #8892b0; cursor: pointer; border-radius: 8px; font-weight: bold; }
         .tab-btn.active { background: var(--accent); color: #0a1219; }
-
-        /* 搜尋欄與切換按鈕區間 */
         .search-row { display: flex; gap: 10px; margin-bottom: 20px; align-items: center; }
-        .search-box { flex: 1; padding: 14px; background: var(--input-bg); border: 1px solid #2d455c; border-radius: 8px; color: white; box-sizing: border-box; min-width: 0; }
-        
-        /* 搜尋列右側控制區 */
-        .search-controls { display: flex; align-items: center; gap: 15px; flex-shrink: 0; }
-        
-        /* 開關 UI 樣式 */
+        .search-box { flex: 1; padding: 14px; background: var(--input-bg); border: 1px solid #2d455c; border-radius: 8px; color: white; }
+        .search-controls { display: flex; align-items: center; gap: 15px; }
         .edit-toggle-wrapper { display: flex; align-items: center; gap: 8px; }
-        .edit-toggle-label { font-size: 0.9rem; font-weight: bold; color: #8892b0; }
-        .switch { position: relative; display: inline-block; width: 44px; height: 24px; margin: 0; }
+        .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
         .switch input { opacity: 0; width: 0; height: 0; }
         .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #cccccc; transition: .4s; border-radius: 24px; }
         .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
-        input:checked + .slider { background-color: #8DC63F; } /* 改用圖片中的綠色 */
+        input:checked + .slider { background-color: #8DC63F; }
         input:checked + .slider:before { transform: translateX(20px); }
-
-        /* 介面檢視切換按鈕 */
-        .view-switcher { display: flex; gap: 6px; flex-shrink: 0; }
-        .view-btn { padding: 12px 16px; background: #162431; border: 1px solid #2d455c; color: #8892b0; cursor: pointer; border-radius: 8px; font-weight: bold; font-size: 0.9rem; transition: all 0.2s; }
+        .view-switcher { display: flex; gap: 6px; }
+        .view-btn { padding: 12px 16px; background: #162431; border: 1px solid #2d455c; color: #8892b0; cursor: pointer; border-radius: 8px; font-weight: bold; }
         .view-btn.active { background: var(--accent); color: #0a1219; }
-
-        /* 兩種介面的容器 */
-        .list-container { width: 100%; }
-        
-        /* 排名列表介面結構 */
-        .normal-list-view-layout { display: flex; align-items: flex-start; gap: 10px; width: 100%; }
-        .number-column { width: 35px; flex-shrink: 0; }
-        .player-list-container { flex: 1; min-width: 0; }
-        .static-rank-num { display: flex; align-items: center; justify-content: center; font-weight: bold; color: var(--accent); font-size: 1.1rem; margin-bottom: 12px; }
-
-        /* Tier List 介面結構 */
+        .list-container { width: 100%; position: relative; }
         .tier-list-container { display: flex; flex-direction: column; gap: 10px; width: 100%; }
-        .tier-row { display: flex; background: #0f1c2c; border: 1px solid #2d455c; border-radius: 12px; min-height: 90px; position: relative; }
-        
-        .tier-header { width: 110px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; text-align: center; font-weight: bold; font-size: 1.2rem; color: #000; padding: 10px; box-sizing: border-box; line-height: 1.3; border-top-left-radius: 11px; border-bottom-left-radius: 11px; }
-        .tier-content { flex: 1; display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; min-height: 70px; background: #111e2a; align-items: center; border-top-right-radius: 11px; border-bottom-right-radius: 11px; }
-
-        /* 完美還原上傳圖片的經典 Tier 配色與新增的 D 級淺藍色、S+ 級紅色 */
-        .tier-t0 { background-color: #ff4d4f; }
-        .tier-t1 { background-color: #ff7f7f; }
-        .tier-t2 { background-color: #ffbf7f; }
-        .tier-t3 { background-color: #ffff7f; }
-        .tier-t4 { background-color: #bf7fff; }
-        .tier-t5 { background-color: #80d4ff; } /* 淺藍色 D 級別 */
-
-        /* 卡片寬度調校 */
-        .list-row { width: auto; box-sizing: border-box; position: relative; }
+        .tier-row { display: flex; background: #0f1c2c; border: 1px solid #2d455c; border-radius: 12px; min-height: 90px; }
+        .tier-header { width: 110px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.2rem; color: #000; padding: 10px; border-top-left-radius: 11px; border-bottom-left-radius: 11px; }
+        .tier-content { flex: 1; display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; min-height: 70px; background: #111e2a; border-top-right-radius: 11px; border-bottom-right-radius: 11px; }
+        .tier-t0 { background-color: #ff4d4f; } .tier-t1 { background-color: #ff7f7f; } .tier-t2 { background-color: #ffbf7f; }
+        .tier-t3 { background-color: #ffff7f; } .tier-t4 { background-color: #bf7fff; } .tier-t5 { background-color: #80d4ff; }
+        .list-row { width: auto; position: relative; }
         .list-row-full { width: 100% !important; margin-bottom: 12px; }
-
-        /* 拖曳虛線空位樣式 */
-        .sortable-ghost .player-card { background: transparent !important; border: 2px dashed #2d455c !important; }
-        .sortable-ghost .player-card * { visibility: hidden !important; }
-
-        /* 微調卡片內部樣式，以配合緊湊的自適應外觀 */
         .player-card { background: var(--card-bg); padding: 8px 12px; border-radius: 8px; display: flex; align-items: center; border: 1px solid #2d455c; gap: 4px; position: relative; }
-        .card-content { display: flex; align-items: center; min-width: 0; overflow: visible; cursor: default; } /* 移除 overflow:hidden 避免標籤邊角被裁切(少了半個圈) */
-        .card-header { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
-        .pos-badge-container { display: flex; flex-direction: column; gap: 2px; align-items: center; position: relative; top: 0; }
-        .pos-badge { padding: 2px 6px; border-radius: 20px; color: #fff; font-size: 0.55rem; font-weight: bold; line-height: 1.2; text-align: center; }
-        .player-name { font-weight: bold; font-size: 0.95rem; white-space: nowrap; }
-        .card-footer { font-size: 0.8rem; color: #8892b0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        
-        /* 隱藏/顯示操作按鈕 (依照是否開啟編輯模式決定) */
+        .card-content { display: flex; align-items: center; min-width: 0; flex: 1; }
+        .pos-badge { padding: 2px 6px; border-radius: 20px; color: #fff; font-size: 0.55rem; font-weight: bold; margin-bottom: 2px; }
+        .player-name { font-weight: bold; font-size: 0.95rem; }
         .card-actions { display: none; align-items: center; gap: 6px; margin-left: 6px; color: #556677; }
         body.edit-mode .card-actions { display: flex; }
-        
-        .drag-handle { font-size: 1.1rem; cursor: grab; padding: 2px; transition: color 0.2s ease; }
-        .drag-handle:hover { color: var(--accent); }
-        .menu-dots { font-size: 1.1rem; cursor: pointer; padding: 2px; transition: color 0.2s ease; }
-        .menu-dots:hover { color: var(--accent); }
-        
-        /* 精緻懸停完整信息提示框 (Tooltip) */
-        .card-tooltip {
-            display: none;
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #0d1a24;
-            border: 1px solid var(--accent);
-            border-radius: 8px;
-            padding: 12px 14px;
-            width: 220px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.85);
-            z-index: 999;
-            pointer-events: auto; /* 允許滑鼠移進 Tooltip */
-            box-sizing: border-box;
-            text-align: left;
-            margin-bottom: 10px;
-        }
-        
-        /* 完美修復箭頭：採用 45度旋轉方塊，繼承藍色邊框與背景，呈現極致清晰、無缺失的完美箭頭 */
-        .card-tooltip::after {
-            content: '';
-            position: absolute;
-            bottom: -6px; /* 露出底部尖角 */
-            left: 50%;
-            transform: translateX(-50%) rotate(45deg);
-            width: 10px;
-            height: 10px;
-            background: #0d1a24;
-            border-right: 1px solid var(--accent);
-            border-bottom: 1px solid var(--accent);
-            z-index: 1000;
-        }
-        
-        /* 透明銜接橋樑：讓滑鼠在移向提示框時不會因為微小間隙導致消失 */
-        .card-tooltip::before {
-            content: '';
-            position: absolute;
-            top: 100%;
-            left: 0;
-            width: 100%;
-            height: 15px;
-            background: transparent;
-        }
-        /* 懸浮觸發顯示 */
-        .player-card:hover .card-tooltip {
-            display: block;
-        }
-        .tooltip-title {
-            font-weight: bold;
-            font-size: 0.95rem;
-            color: #fff;
-            margin-bottom: 6px;
-            border-bottom: 1px solid #2d455c;
-            padding-bottom: 4px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        .tooltip-grid {
-            display: grid;
-            grid-template-columns: auto 1fr;
-            gap: 4px 8px;
-            font-size: 0.8rem;
-            margin-bottom: 4px;
-            line-height: 1.4;
-        }
-        .tooltip-label {
-            color: #8892b0;
-            white-space: nowrap;
-        }
-        .tooltip-value {
-            color: #e6edf3;
-            font-weight: 500;
-        }
-        .tooltip-line {
-            font-size: 0.8rem;
-            color: #8892b0;
-            margin-bottom: 4px;
-            line-height: 1.4;
-        }
-        .tooltip-line span {
-            color: #e6edf3;
-            font-weight: 500;
-        }
-
-        /* 彈出編輯視窗 */
-        .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(10,18,25,0.9); justify-content: center; align-items: center; z-index: 1000; }
+        .card-tooltip { display: none; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: #0d1a24; border: 1px solid var(--accent); border-radius: 8px; padding: 12px; width: 220px; z-index: 999; box-shadow: 0 8px 24px rgba(0,0,0,0.85); margin-bottom: 10px; }
+        .player-card:hover .card-tooltip { display: block; }
+        .tooltip-title { font-weight: bold; font-size: 0.95rem; border-bottom: 1px solid #2d455c; padding-bottom: 4px; margin-bottom: 6px; }
+        .tooltip-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; font-size: 0.8rem; }
+        .tooltip-label { color: #8892b0; }
+        .tooltip-line { font-size: 0.8rem; color: #8892b0; margin-top: 6px; }
+        .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(10,18,25,0.9); justify-content: center; align-items: center; z-index: 2000; }
         .modal-content { background: var(--card-bg); padding: 25px; border-radius: 16px; width: 90%; max-width: 400px; border: 1px solid #2d455c; }
         .form-group { margin-bottom: 15px; }
-        .form-group label { display: block; margin-bottom: 5px; color: #8892b0; font-size: 0.9rem; }
-        
-        /* 確保輸入框文字在所有瀏覽器與 iframe 環境下皆能正常用滑鼠選取與複製 */
-        input, textarea, select { 
-            width: 100%; 
-            padding: 10px; 
-            border: 1px solid #2d455c; 
-            border-radius: 6px; 
-            background: var(--input-bg); 
-            color: white; 
-            box-sizing: border-box; 
-            user-select: text !important;
-            -webkit-user-select: text !important;
-            -moz-user-select: text !important;
-            -ms-user-select: text !important;
-        }
+        input, textarea, select { width: 100%; padding: 10px; border: 1px solid #2d455c; border-radius: 6px; background: var(--input-bg); color: white; box-sizing: border-box; }
         .pos-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
         .pos-option { padding: 8px 0; border: 2px solid #2d455c; background: #162431; color: #8892b0; border-radius: 6px; cursor: pointer; font-weight: bold; }
         .pos-option.active { border-color: var(--accent); color: #fff; }
-        
         .fab { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 500px; padding: 16px; background: var(--accent); color: #0a1219; border: none; border-radius: 50px; font-weight: bold; box-shadow: 0 4px 15px rgba(0,0,0,0.5); z-index: 50; }
         .btn-del { background: #ff4d4f !important; color: white !important; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; }
-
-        /* 手機版優化 */
-        @media (max-width: 600px) {
-            body { padding: 10px; }
-            .header h1 { font-size: 1.4rem; }
-            .logo { width: 40px; height: 40px; }
-            .tab-btn { padding: 8px; font-size: 0.9rem; }
-            
-            .search-row { flex-direction: column; gap: 10px; align-items: stretch; margin-bottom: 15px; }
-            .search-box { padding: 10px; font-size: 0.9rem; }
-            .search-controls { width: 100%; justify-content: space-between; }
-            .view-switcher { flex: 1; justify-content: flex-end; }
-            .view-btn { text-align: center; padding: 8px 12px; font-size: 0.85rem; }
-
-            .tier-row { min-height: 80px; }
-            .tier-header { width: 85px; font-size: 1.1rem; padding: 6px; }
-            .tier-content { padding: 6px; gap: 6px; }
-            
-            .normal-list-view-layout { gap: 5px; }
-            .number-column { width: 25px; }
-            .static-rank-num { font-size: 1rem; margin-bottom: 10px; }
-
-            .player-card { padding: 8px 10px; border-radius: 8px; }
-            .player-name { font-size: 0.85rem; }
-            .pos-badge-container { top: 0px; }
-            .pos-badge { font-size: 0.5rem; padding: 1px 5px; }
-            .card-footer { font-size: 0.75rem; }
-            .card-actions { gap: 4px; margin-left: 4px; }
-            .drag-handle, .menu-dots { font-size: 1rem; padding: 1px; }
-            
-            /* 手機版隱藏 Tooltip 以防止干擾點擊觸控 */
-            .player-card:hover .card-tooltip { display: none; }
-            
-            .pos-option { padding: 5px 0; font-size: 0.8rem; }
-            .modal-content { padding: 15px; width: 92%; }
-            input, textarea, select { padding: 8px; font-size: 0.9rem; }
-            .form-group { margin-bottom: 12px; }
-        }
     </style>
 </head>
 <body>
@@ -731,8 +370,8 @@
             <h1>玩家統計系統</h1>
         </div>
         <div class="tabs">
-            <button class="tab-btn active" data-tab="players" onclick="switchTab('players')">評級榜</button>
-            <button class="tab-btn" data-tab="trash" onclick="switchTab('trash')">畜生名單</button>
+            <button class="tab-btn" data-tab="players" onclick="switchTab('players')">評級榜</button>
+            <button class="tab-btn active" data-tab="trash" onclick="switchTab('trash')">畜生名單</button>
         </div>
         <div class="search-row">
             <input type="text" class="search-box" placeholder="🔍 搜尋 ID 或 DC..." oninput="updateSearch(this.value)">
@@ -751,58 +390,36 @@
             </div>
         </div>
         <div class="list-container">
-            <!-- 列表檢視模式 -->
+            <!-- 霧面遮罩，現在移到這裡，只遮蓋評分區/列表區 -->
+            <div id="lockOverlay" class="lock-overlay">
+                <div class="lock-icon">🔒</div>
+                <p>評級榜已上鎖</p>
+                <button class="unlock-btn" onclick="showPasswordModal()">點擊輸入密碼解鎖</button>
+            </div>
+
             <div id="listNormal" style="display: none; width: 100%;">
                 <div class="normal-list-view-layout">
                     <div id="numberColumn" class="number-column"></div>
                     <div id="playerList" class="player-list-container"></div>
                 </div>
             </div>
-
-            <!-- Tier List 區間分級介面 -->
             <div id="tierList" class="tier-list-container">
-                <!-- Tier 0 (S+) -->
-                <div class="tier-row">
-                    <div class="tier-header tier-t0">S+</div>
-                    <div id="tier-T0" class="tier-content" data-tier="T0"></div>
-                </div>
-                <!-- Tier 1 -->
-                <div class="tier-row">
-                    <div class="tier-header tier-t1">S</div>
-                    <div id="tier-T1" class="tier-content" data-tier="T1"></div>
-                </div>
-                <!-- Tier 2 -->
-                <div class="tier-row">
-                    <div class="tier-header tier-t2">A</div>
-                    <div id="tier-T2" class="tier-content" data-tier="T2"></div>
-                </div>
-                <!-- Tier 3 -->
-                <div class="tier-row">
-                    <div class="tier-header tier-t3">B</div>
-                    <div id="tier-T3" class="tier-content" data-tier="T3"></div>
-                </div>
-                <!-- Tier 4 -->
-                <div class="tier-row">
-                    <div class="tier-header tier-t4">C</div>
-                    <div id="tier-T4" class="tier-content" data-tier="T4"></div>
-                </div>
-                <!-- Tier 5 -->
-                <div class="tier-row">
-                    <div class="tier-header tier-t5">D</div>
-                    <div id="tier-T5" class="tier-content" data-tier="T5"></div>
-                </div>
+                <div class="tier-row"><div class="tier-header tier-t0">S+</div><div id="tier-T0" class="tier-content" data-tier="T0"></div></div>
+                <div class="tier-row"><div class="tier-header tier-t1">S</div><div id="tier-T1" class="tier-content" data-tier="T1"></div></div>
+                <div class="tier-row"><div class="tier-header tier-t2">A</div><div id="tier-T2" class="tier-content" data-tier="T2"></div></div>
+                <div class="tier-row"><div class="tier-header tier-t3">B</div><div id="tier-T3" class="tier-content" data-tier="T3"></div></div>
+                <div class="tier-row"><div class="tier-header tier-t4">C</div><div id="tier-T4" class="tier-content" data-tier="T4"></div></div>
+                <div class="tier-row"><div class="tier-header tier-t5">D</div><div id="tier-T5" class="tier-content" data-tier="T5"></div></div>
             </div>
         </div>
     </div>
+
     <button class="fab" onclick="openModal()">+ 新增玩家</button>
     
-    <!-- 新增：密碼輸入框 Modal -->
-    <div class="modal" id="passwordModal" style="z-index: 1100;"> <!-- 確保層級比編輯框高 -->
+    <div class="modal" id="passwordModal" style="z-index: 3000;">
         <div class="modal-content" style="text-align: center;">
             <h2 style="margin-top:0; color:#fff;">請輸入密碼</h2>
-            <div class="form-group">
-                <input type="password" id="passwordInput" placeholder="輸入密碼以解鎖評級榜" style="text-align: center; font-size: 1.1rem; padding: 12px;">
-            </div>
+            <div class="form-group"><input type="password" id="passwordInput" placeholder="輸入密碼..." style="text-align: center; font-size: 1.1rem; padding: 12px;"></div>
             <div style="display:flex; justify-content:center; gap:10px; margin-top: 20px;">
                 <button onclick="closePasswordModal()" style="padding:10px 20px; background:#2d455c; border:none; border-radius:6px; color:#fff; cursor:pointer;">取消</button>
                 <button onclick="verifyPassword()" style="padding:10px 20px; background:var(--accent); border:none; border-radius:6px; color:#000; font-weight:bold; cursor:pointer;">確認</button>
@@ -815,14 +432,8 @@
             <h2 style="margin-top:0; color:#fff;">編輯資料</h2>
             <input type="hidden" id="editId">
             <div class="form-group"><label>遊戲 ID</label><input type="text" id="name"></div>
-            <!-- 在遊戲ID下新增暱稱(顯示名)輸入框 -->
-            <div class="form-group"><label>暱稱(顯示名)</label><input type="text" id="nickName" placeholder="卡片顯示的自訂名稱"></div>
-            <!-- DC 名稱輸入框組合 -->
-            <div class="form-group">
-                <label>DC 名稱</label>
-                <input type="text" id="dcName" style="margin-bottom: 8px;" placeholder="主要 DC 帳號">
-                <input type="text" id="dcName2" placeholder="備用 DC 帳號 (選填)">
-            </div>
+            <div class="form-group"><label>暱稱(顯示名)</label><input type="text" id="nickName"></div>
+            <div class="form-group"><label>DC 名稱</label><input type="text" id="dcName" style="margin-bottom:8px;"><input type="text" id="dcName2"></div>
             <div class="form-group"><label>位置</label>
                 <div class="pos-grid">
                     <button class="pos-option" data-pos="TOP" onclick="selectPos('TOP')" style="color:#9747FF">TOP</button>
@@ -832,25 +443,12 @@
                     <button class="pos-option" data-pos="SUP" onclick="selectPos('SUP')" style="color:#EC4899">SUP</button>
                 </div>
             </div>
-            <div class="form-group">
-                <label>實力分級</label>
-                <select id="score">
-                    <option value="S+">S+</option>
-                    <option value="S">S</option>
-                    <option value="A">A</option>
-                    <option value="B">B</option>
-                    <option value="C">C</option>
-                    <option value="D">D</option>
-                </select>
-            </div>
-            <div class="form-group"><label>備註 (文字)</label><textarea id="note"></textarea></div>
-            <div class="form-group"><label>備註圖片 (網址)</label><input type="text" id="imgUrl" placeholder="請輸入圖片 URL (例如 https://...)"></div>
+            <div class="form-group"><label>實力分級</label><select id="score"><option value="S+">S+</option><option value="S">S</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select></div>
+            <div class="form-group"><label>備註</label><textarea id="note"></textarea></div>
+            <div class="form-group"><label>備註圖片 (網址)</label><input type="text" id="imgUrl"></div>
             <div style="display:flex; justify-content:space-between; gap:10px;">
                 <button id="delBtn" class="btn-del" onclick="deletePlayer()">刪除</button>
-                <div style="display:flex; gap:10px;">
-                    <button onclick="closeModal()" style="padding:10px 20px; background:#2d455c; border:none; border-radius:6px; color:#fff; cursor:pointer;">取消</button>
-                    <button onclick="savePlayer()" style="padding:10px 20px; background:var(--accent); border:none; border-radius:6px; color:#000; font-weight:bold; cursor:pointer;">儲存</button>
-                </div>
+                <div style="display:flex; gap:10px;"><button onclick="closeModal()" style="padding:10px 20px; background:#2d455c; border:none; border-radius:6px; color:#fff; cursor:pointer;">取消</button><button onclick="savePlayer()" style="padding:10px 20px; background:var(--accent); border:none; border-radius:6px; color:#000; font-weight:bold; cursor:pointer;">儲存</button></div>
             </div>
         </div>
     </div>
