@@ -43,20 +43,51 @@
 
         const getCol = (col) => collection(db, 'artifacts', appId, 'public', 'data', col);
 
+        // --- 圖片預覽與貼上邏輯升級 ---
+        window.updateImagePreview = (url) => {
+            const previewCont = document.getElementById('imgPreviewContainer');
+            const img = document.getElementById('imgPreview');
+            const inputCont = document.getElementById('imgInputContainer');
+            
+            if (url && url.trim() !== '') {
+                img.src = url;
+                previewCont.style.display = 'block';
+                // 如果是貼上的 Base64 截圖(字串極長)，就自動隱藏輸入框，只顯示圖片，讓UI保持乾淨
+                if (url.startsWith('data:image')) {
+                    inputCont.style.display = 'none';
+                } else {
+                    inputCont.style.display = 'block';
+                }
+            } else {
+                img.src = '';
+                previewCont.style.display = 'none';
+                inputCont.style.display = 'block';
+                document.getElementById('imgUrl').value = '';
+            }
+        };
+
+        window.clearImage = () => {
+            window.updateImagePreview('');
+        };
+
         window.handlePaste = (e) => {
-            const items = e.clipboardData.items;
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
             for (let i = 0; i < items.length; i++) {
                 if (items[i].type.indexOf("image") !== -1) {
                     const file = items[i].getAsFile();
                     const reader = new FileReader();
                     reader.onload = (event) => {
-                        document.getElementById('imgUrl').value = event.target.result;
+                        const base64Url = event.target.result;
+                        document.getElementById('imgUrl').value = base64Url;
+                        window.updateImagePreview(base64Url); // 即時預覽並隱藏文字框
                     };
                     reader.readAsDataURL(file);
                     e.preventDefault();
+                    break;
                 }
             }
         };
+        // ------------------------------
 
         function initSortable() {
             sortableInstances.forEach(inst => inst.destroy());
@@ -200,7 +231,10 @@
             document.getElementById('dcName').value = p ? (p.dcName || '') : '';
             document.getElementById('dcName2').value = p ? (p.dcName2 || '') : '';
             document.getElementById('note').value = p ? p.note : '';
-            document.getElementById('imgUrl').value = p ? (p.imgUrl || '') : '';
+            
+            const savedImgUrl = p ? (p.imgUrl || '') : '';
+            document.getElementById('imgUrl').value = savedImgUrl;
+            window.updateImagePreview(savedImgUrl); // 彈出編輯時自動判定圖片顯示
             
             let scoreVal = p ? (p.score >= 105 ? 'S+' : p.score >= 90 ? 'S' : p.score >= 75 ? 'A' : p.score >= 60 ? 'B' : p.score >= 45 ? 'C' : 'D') : 'S+';
             document.getElementById('score').value = scoreVal;
@@ -254,7 +288,6 @@
                 fabBtn.style.display = 'block';
             }
 
-            // 動態切換分級標籤 (評級榜 vs 雷人榜)
             const isTrash = activeTab === 'trash';
             const tierLabels = isTrash 
                 ? ['畜生級', '災難級', '危險級', '警戒級', '異常級', '注意級']
@@ -268,7 +301,6 @@
             document.querySelector('.tier-t4').innerText = tierLabels[4];
             document.querySelector('.tier-t5').innerText = tierLabels[5];
 
-            // 更新下拉選單的顯示文字 (value 仍維持 S+ ~ D 不變)
             const scoreSelect = document.getElementById('score');
             if(scoreSelect) {
                 Array.from(scoreSelect.options).forEach((opt, i) => {
@@ -345,7 +377,7 @@
                     row.innerHTML = `
                         <div class="player-card" style="display: flex; align-items: center; padding: 12px; gap: 12px;">
                             <div style="font-size: 1.2rem; font-weight: bold; color: #8892b0; min-width: 30px; text-align: center;">${index + 1}</div>
-                            <div style="background: ${tierColor}; color: #000; padding: 4px 8px; border-radius: 4px; font-weight: bold; min-width: 45px; text-align: center; white-space: nowrap;">${rankLabel}</div>
+                            <div style="background: ${tierColor}; color: #000; padding: 4px 8px; border-radius: 4px; font-weight: bold; min-width: 55px; text-align: center; white-space: nowrap;">${rankLabel}</div>
                             <div class="card-content" style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
                                 <div class="card-header" style="display: flex; align-items: center; gap: 8px;">
                                     <div class="pos-badge-container" style="display:flex; gap:2px;">${posHtml}</div>
@@ -428,6 +460,12 @@
         .pos-option.active { border-color: var(--accent); color: #fff; }
         .fab { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 500px; padding: 16px; background: var(--accent); color: #0a1219; border: none; border-radius: 50px; font-weight: bold; box-shadow: 0 4px 15px rgba(0,0,0,0.5); z-index: 50; }
         .btn-del { background: #ff4d4f !important; color: white !important; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; }
+        
+        /* 圖片預覽區專用樣式 */
+        .img-preview-box { position: relative; margin-top: 8px; border-radius: 6px; background: #0d1a24; border: 1px dashed #2d455c; padding: 10px; text-align: center; }
+        .img-preview-box img { max-width: 100%; max-height: 160px; border-radius: 4px; object-fit: contain; }
+        .img-preview-remove { position: absolute; top: -8px; right: -8px; background: #ff4d4f; color: white; border: none; border-radius: 50%; width: 24px; height: 24px; font-size: 14px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
+        .img-preview-remove:hover { background: #ff7875; }
     </style>
 </head>
 <body>
@@ -512,7 +550,19 @@
             </div>
             <div class="form-group"><label id="scoreLabel">實力分級</label><select id="score"><option value="S+">S+</option><option value="S">S</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select></div>
             <div class="form-group"><label>備註</label><textarea id="note"></textarea></div>
-            <div class="form-group"><label>備註圖片</label><input type="text" id="imgUrl" onpaste="handlePaste(event)" placeholder="點此貼上圖片..."></div>
+            
+            <!-- 圖片升級區塊 -->
+            <div class="form-group">
+                <label>備註圖片</label>
+                <div id="imgInputContainer">
+                    <input type="text" id="imgUrl" onpaste="handlePaste(event)" oninput="updateImagePreview(this.value)" placeholder="在此 Ctrl+V 貼上截圖，或輸入網址...">
+                </div>
+                <div id="imgPreviewContainer" class="img-preview-box" style="display: none;">
+                    <button type="button" class="img-preview-remove" onclick="clearImage()">×</button>
+                    <img id="imgPreview" src="" alt="圖片預覽">
+                </div>
+            </div>
+
             <div style="display:flex; justify-content:space-between; gap:10px;">
                 <button id="delBtn" class="btn-del" onclick="deletePlayer()">刪除</button>
                 <div style="display:flex; gap:10px;"><button onclick="closeModal()" style="padding:10px 20px; background:#2d455c; border:none; border-radius:6px; color:#fff; cursor:pointer;">取消</button><button onclick="savePlayer()" style="padding:10px 20px; background:var(--accent); border:none; border-radius:6px; color:#000; font-weight:bold; cursor:pointer;">儲存</button></div>
