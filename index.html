@@ -274,23 +274,35 @@
                     row.dataset.score = p.score || 0;
                     const posHtml = (Array.isArray(p.pos) ? p.pos : [p.pos || 'TOP']).map(pos => `<span class="pos-badge" style="background:${POS_COLORS[pos] || '#999'}">${pos}</span>`).join('');
                     
+                    const s = p.score || 0;
+                    const rankLabel = s >= 105 ? 'S+' : s >= 90 ? 'S' : s >= 75 ? 'A' : s >= 60 ? 'B' : s >= 45 ? 'C' : 'D';
+                    const t = s >= 105 ? 'T0' : s >= 90 ? 'T1' : s >= 75 ? 'T2' : s >= 60 ? 'T3' : s >= 45 ? 'T4' : 'T5';
+
                     row.innerHTML = `
                         <div class="player-card">
                             <div class="card-content"><div class="card-header"><div class="pos-badge-container">${posHtml}</div><span class="player-name">${p.nickName || '-'}</span></div></div>
                             <div class="card-actions"><span class="drag-handle">⠿</span><span class="menu-dots" onclick="openModal('${p.id}')">⋮</span></div>
+                            
+                            <!-- 完整信息懸停提示框 (完美還原) -->
                             <div class="card-tooltip">
                                 <div class="tooltip-title">${p.name || '-'}</div>
                                 <div class="tooltip-grid">
-                                    <div class="tooltip-label">暱稱</div><div class="tooltip-value">${p.nickName || '-'}</div>
-                                    <div class="tooltip-label">DC</div><div class="tooltip-value">${p.dcName || '-'}${p.dcName2 ? `<br>${p.dcName2}` : ''}</div>
+                                    <div class="tooltip-label">暱稱</div>
+                                    <div class="tooltip-value">${p.nickName || '-'}</div>
+                                    <div class="tooltip-label">DC 名稱</div>
+                                    <div class="tooltip-value">${p.dcName || '-'}${p.dcName2 ? `<br>${p.dcName2}` : ''}</div>
+                                    <div class="tooltip-label">實力分級</div>
+                                    <div class="tooltip-value">${rankLabel} 級</div>
+                                    <div class="tooltip-label">位置</div>
+                                    <div class="tooltip-value" style="display:flex; gap:2px; flex-wrap:wrap;">${posHtml}</div>
                                 </div>
-                                <div class="tooltip-line">備註: <span>${p.note || '-'}</span></div>
+                                <div class="tooltip-line" style="border-top: 1px dashed #2d455c; margin-top: 6px; padding-top: 4px; white-space: normal;">
+                                    備註: <span>${p.note || '-'}</span>
+                                </div>
                                 ${p.imgUrl ? `<div style="margin-top:6px; text-align:center;"><img src="${p.imgUrl}" style="max-width:100%; border-radius:4px;"></div>` : ''}
                             </div>
                         </div>
                     `;
-                    const s = p.score || 0;
-                    const t = s >= 105 ? 'T0' : s >= 90 ? 'T1' : s >= 75 ? 'T2' : s >= 60 ? 'T3' : s >= 45 ? 'T4' : 'T5';
                     document.getElementById(`tier-${t}`).appendChild(row);
                 });
                 initSortable();
@@ -382,12 +394,95 @@
         .player-name { font-weight: bold; font-size: 0.95rem; }
         .card-actions { display: none; align-items: center; gap: 6px; margin-left: 6px; color: #556677; }
         body.edit-mode .card-actions { display: flex; }
-        .card-tooltip { display: none; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: #0d1a24; border: 1px solid var(--accent); border-radius: 8px; padding: 12px; width: 220px; z-index: 999; box-shadow: 0 8px 24px rgba(0,0,0,0.85); margin-bottom: 10px; }
-        .player-card:hover .card-tooltip { display: block; }
-        .tooltip-title { font-weight: bold; font-size: 0.95rem; border-bottom: 1px solid #2d455c; padding-bottom: 4px; margin-bottom: 6px; }
-        .tooltip-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; font-size: 0.8rem; }
-        .tooltip-label { color: #8892b0; }
-        .tooltip-line { font-size: 0.8rem; color: #8892b0; margin-top: 6px; }
+        
+        /* 精緻懸停完整信息提示框 (Tooltip) */
+        .card-tooltip {
+            display: none;
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #0d1a24;
+            border: 1px solid var(--accent);
+            border-radius: 8px;
+            padding: 12px 14px;
+            width: 220px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.85);
+            z-index: 999;
+            pointer-events: auto; /* 允許滑鼠移進 Tooltip */
+            box-sizing: border-box;
+            text-align: left;
+            margin-bottom: 10px;
+        }
+
+        /* 完美修復箭頭：採用 45度旋轉方塊，繼承藍色邊框與背景 */
+        .card-tooltip::after {
+            content: '';
+            position: absolute;
+            bottom: -6px; /* 露出底部尖角 */
+            left: 50%;
+            transform: translateX(-50%) rotate(45deg);
+            width: 10px;
+            height: 10px;
+            background: #0d1a24;
+            border-right: 1px solid var(--accent);
+            border-bottom: 1px solid var(--accent);
+            z-index: 1000;
+        }
+
+        /* 透明銜接橋樑：讓滑鼠在移向提示框時不會因為微小間隙導致消失 */
+        .card-tooltip::before {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 0;
+            width: 100%;
+            height: 15px;
+            background: transparent;
+        }
+        
+        /* 懸浮觸發顯示 */
+        .player-card:hover .card-tooltip {
+            display: block;
+        }
+        .tooltip-title {
+            font-weight: bold;
+            font-size: 0.95rem;
+            color: #fff;
+            margin-bottom: 6px;
+            border-bottom: 1px solid #2d455c;
+            padding-bottom: 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .tooltip-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 4px 8px;
+            font-size: 0.8rem;
+            margin-bottom: 4px;
+            line-height: 1.4;
+        }
+        .tooltip-label {
+            color: #8892b0;
+            white-space: nowrap;
+        }
+        .tooltip-value {
+            color: #e6edf3;
+            font-weight: 500;
+        }
+        .tooltip-line {
+            font-size: 0.8rem;
+            color: #8892b0;
+            margin-bottom: 4px;
+            line-height: 1.4;
+        }
+        .tooltip-line span {
+            color: #e6edf3;
+            font-weight: 500;
+        }
+        
         .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(10,18,25,0.9); justify-content: center; align-items: center; z-index: 2000; }
         .modal-content { background: var(--card-bg); padding: 25px; border-radius: 16px; width: 90%; max-width: 400px; border: 1px solid #2d455c; }
         .form-group { margin-bottom: 15px; }
