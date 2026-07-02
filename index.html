@@ -38,6 +38,7 @@
         let sortableInstances = [];
         let sortableListInstance = null;
         let isEditMode = false; // 新增：追蹤目前是否為編輯模式
+        let isPlayersTabUnlocked = false; // 新增：追蹤評級榜是否已解鎖
 
         const getCol = (col) => collection(db, 'artifacts', appId, 'public', 'data', col);
 
@@ -151,9 +152,37 @@
         window.updateSearch = (val) => { searchQuery = val.toLowerCase(); render(); };
         
         window.switchTab = (tab) => {
+            if (tab === 'players' && !isPlayersTabUnlocked) {
+                // 如果是切換到評級榜，且尚未解鎖，則跳出密碼輸入框
+                showPasswordModal();
+                return;
+            }
             activeTab = tab;
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
             render();
+        };
+
+        // 新增：顯示密碼輸入框
+        window.showPasswordModal = () => {
+            document.getElementById('passwordModal').style.display = 'flex';
+        };
+
+        // 新增：隱藏密碼輸入框
+        window.closePasswordModal = () => {
+            document.getElementById('passwordModal').style.display = 'none';
+            document.getElementById('passwordInput').value = ''; // 清空輸入
+        };
+
+        // 新增：驗證密碼
+        window.verifyPassword = () => {
+            const pwd = document.getElementById('passwordInput').value;
+            if (pwd === 'GodCloud') {
+                isPlayersTabUnlocked = true;
+                closePasswordModal();
+                switchTab('players'); // 解鎖成功，切換到評級榜
+            } else {
+                alert('密碼錯誤！');
+            }
         };
 
         window.switchView = (view) => {
@@ -184,6 +213,7 @@
             document.getElementById('dcName').value = p ? (p.dcName || '') : '';
             document.getElementById('dcName2').value = p ? (p.dcName2 || '') : '';
             document.getElementById('note').value = p ? p.note : '';
+            document.getElementById('imgUrl').value = p ? (p.imgUrl || '') : ''; // 新增：讀取圖片網址
             
             // 將實力分數轉換回對應的下拉選單選項 (S+, S, A, B, C, D)
             let scoreVal = 'D';
@@ -238,7 +268,8 @@
                 dcName2: document.getElementById('dcName2').value || '',
                 score: scoreNum,
                 pos: selectedPos, // 這裡現在會儲存包含多個位置的陣列
-                note: document.getElementById('note').value
+                note: document.getElementById('note').value,
+                imgUrl: document.getElementById('imgUrl').value || '' // 新增：儲存圖片網址
             };
             closeModal();
             if (id) {
@@ -383,6 +414,7 @@
                                 <div class="tooltip-line" style="border-top: 1px dashed #2d455c; margin-top: 6px; padding-top: 4px; white-space: normal;">
                                     備註: <span>${p.note || '-'}</span>
                                 </div>
+                                ${p.imgUrl ? `<div style="margin-top: 6px; text-align: center;"><img src="${p.imgUrl}" alt="備註圖片" style="max-width: 100%; max-height: 150px; border-radius: 4px;"></div>` : ''}
                             </div>
                         </div>
                     `;
@@ -441,6 +473,7 @@
                                 </div>
                                 <div class="card-footer">DC: ${dcMerged} | ${p.note || '-'}</div>
                             </div>
+                            ${p.imgUrl ? `<div class="card-img" style="margin-right: 8px;"><img src="${p.imgUrl}" alt="備註圖片" style="max-height: 30px; border-radius: 4px;"></div>` : ''}
                             <div class="card-actions">
                                 <span class="drag-handle" title="拖曳">⠿</span>
                                 <span class="menu-dots" onclick="openModal('${p.id}')" title="編輯">⋮</span>
@@ -762,6 +795,21 @@
         </div>
     </div>
     <button class="fab" onclick="openModal()">+ 新增玩家</button>
+    
+    <!-- 新增：密碼輸入框 Modal -->
+    <div class="modal" id="passwordModal" style="z-index: 1100;"> <!-- 確保層級比編輯框高 -->
+        <div class="modal-content" style="text-align: center;">
+            <h2 style="margin-top:0; color:#fff;">請輸入密碼</h2>
+            <div class="form-group">
+                <input type="password" id="passwordInput" placeholder="輸入密碼以解鎖評級榜" style="text-align: center; font-size: 1.1rem; padding: 12px;">
+            </div>
+            <div style="display:flex; justify-content:center; gap:10px; margin-top: 20px;">
+                <button onclick="closePasswordModal()" style="padding:10px 20px; background:#2d455c; border:none; border-radius:6px; color:#fff; cursor:pointer;">取消</button>
+                <button onclick="verifyPassword()" style="padding:10px 20px; background:var(--accent); border:none; border-radius:6px; color:#000; font-weight:bold; cursor:pointer;">確認</button>
+            </div>
+        </div>
+    </div>
+
     <div class="modal" id="modal">
         <div class="modal-content">
             <h2 style="margin-top:0; color:#fff;">編輯資料</h2>
@@ -795,7 +843,8 @@
                     <option value="D">D</option>
                 </select>
             </div>
-            <div class="form-group"><label>備註</label><textarea id="note"></textarea></div>
+            <div class="form-group"><label>備註 (文字)</label><textarea id="note"></textarea></div>
+            <div class="form-group"><label>備註圖片 (網址)</label><input type="text" id="imgUrl" placeholder="請輸入圖片 URL (例如 https://...)"></div>
             <div style="display:flex; justify-content:space-between; gap:10px;">
                 <button id="delBtn" class="btn-del" onclick="deletePlayer()">刪除</button>
                 <div style="display:flex; gap:10px;">
