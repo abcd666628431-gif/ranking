@@ -550,13 +550,15 @@
                     }
                     if (posArray.length === 0) posArray = ['TOP'];
                     
-                    const posHtml = posArray.map(pos => `<span class="pos-badge" style="background:${POS_COLORS[pos] || '#999'}">${pos}</span>`).join('<span style="width:2px;display:inline-block;"></span>');
+                    const posHtml = posArray.map(pos => `<span class="pos-badge" style="background:${POS_COLORS[pos] || '#999'}">${pos}</span>`).join('');
                     
                     row.innerHTML = `
                         <div class="player-card">
                             <div class="card-content">
                                 <div class="card-header" style="margin-bottom: 0;">
-                                    ${posHtml}
+                                    <div class="pos-col">
+                                        ${posHtml}
+                                    </div>
                                     <span class="player-name" style="font-size: 0.85rem; font-weight: normal; margin-left: 4px;">${p.nickName || '-'}</span>
                                 </div>
                             </div>
@@ -577,7 +579,7 @@
                                     <div class="tooltip-label">建立日期</div>
                                     <div class="tooltip-value">${p.createDate || '-'}</div>
                                     <div class="tooltip-label">位置</div>
-                                    <div class="tooltip-value">
+                                    <div class="tooltip-value" style="display: flex; gap: 2px; flex-wrap: wrap; align-items: center;">
                                         ${posHtml}
                                     </div>
                                 </div>
@@ -629,7 +631,7 @@
                     }
                     if (posArray.length === 0) posArray = ['TOP'];
                     
-                    const posHtml = posArray.map(pos => `<span class="pos-badge" style="background:${POS_COLORS[pos] || '#999'}">${pos}</span>`).join('<span style="width:2px;display:inline-block;"></span>');
+                    const posHtml = posArray.map(pos => `<span class="pos-badge" style="background:${POS_COLORS[pos] || '#999'}">${pos}</span>`).join('');
 
                     const dcMerged = [p.dcName, p.dcName2].filter(x => x && x.trim() !== '').join(' / ') || '-';
                     const displayNameCombined = p.nickName ? `${p.name || '-'} (${p.nickName})` : (p.name || '-');
@@ -638,14 +640,14 @@
                         <div class="player-card">
                             <div class="card-content">
                                 <div class="card-header">
-                                    ${posHtml}
+                                    <div class="pos-col">
+                                        ${posHtml}
+                                    </div>
                                     <span class="player-name" style="margin-left: 4px;">${displayNameCombined} ${activeTab === 'players' ? `(${rankLabel})` : ''}</span>
                                 </div>
                                 <div class="card-footer">DC: ${dcMerged} | ${p.note || '-'}</div>
                             </div>
-                            ${p.imgUrl ? `<div class="card-img" style="margin-right:8px;"><img src="${p.imgUrl}" onclick="openImageModal('${p.imgUrl}')" style="max-height:30px; border-radius:4px; cursor:zoom-in;"></div>` : ''}
-                            <div class="card-actions">
-                                <span class="drag-handle" title="拖曳">⠿</span>
+                            ${p.imgUrl ? `<div class="card-img" style="margin-right:8px;"><img src="${p.imgUrl}" style="max-height:30px; border-radius:4px;"></div>` : ''}
                                 <span class="menu-dots" onclick="openModal('${p.id}')" title="編輯">⋮</span>
                             </div>
 
@@ -661,7 +663,7 @@
                                     <div class="tooltip-label">建立日期</div>
                                     <div class="tooltip-value">${p.createDate || '-'}</div>
                                     <div class="tooltip-label">位置</div>
-                                    <div class="tooltip-value">
+                                    <div class="tooltip-value" style="display: flex; gap: 2px; flex-wrap: wrap; align-items: center;">
                                         ${posHtml}
                                     </div>
                                 </div>
@@ -793,8 +795,9 @@
             -webkit-user-select: none; 
         }
         
-        .card-header { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
-        .pos-badge { padding: 2px 6px; border-radius: 4px; color: #fff; font-size: 0.7rem; font-weight: bold; }
+        .card-header { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+        .pos-col { display: flex; flex-direction: column; gap: 2px; align-items: center; justify-content: center; }
+        .pos-badge { padding: 1px 6px; border-radius: 10px; color: #fff; font-size: 0.65rem; font-weight: bold; min-width: 32px; text-align: center; box-sizing: border-box; line-height: 1.2; letter-spacing: 0.5px; }
         .player-name { font-weight: bold; font-size: 0.95rem; white-space: nowrap; }
         .card-footer { font-size: 0.8rem; color: #8892b0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         
@@ -1020,7 +1023,7 @@
 
             .player-card { padding: 8px 10px; border-radius: 8px; }
             .player-name { font-size: 0.85rem; }
-            .pos-badge { font-size: 0.65rem; padding: 2px 4px; }
+            .pos-badge { font-size: 0.6rem; padding: 1px 4px; min-width: 28px; }
             .card-footer { font-size: 0.75rem; }
             .card-actions { gap: 4px; margin-left: 4px; }
             .drag-handle, .menu-dots { font-size: 1rem; padding: 1px; }
