@@ -458,13 +458,47 @@
                 const timeStr = new Date(log.timestamp).toLocaleTimeString('en-US', {hour12: false, hour: '2-digit', minute:'2-digit'});
                 const el = document.createElement('div');
                 el.className = 'log-entry';
-                el.innerHTML = `
+                
+                // 完美實作：懸停延遲 0.5 秒展開
+                let timer;
+                el.addEventListener('mouseenter', () => {
+                    timer = setTimeout(() => el.classList.add('expanded'), 500);
+                });
+                el.addEventListener('mouseleave', () => {
+                    if (timer) clearTimeout(timer);
+                    el.classList.remove('expanded');
+                });
+
+                const isSystem = log.action === '系統' || log.targetName === '系統';
+                const isDelete = log.action === '刪除' || log.action === '移除';
+                const actionClass = isDelete ? 'log-action danger' : 'log-action';
+                const targetClass = isSystem ? 'log-target system' : 'log-target';
+                
+                // 動態給予操作者專屬顏色
+                const userColor = log.user === sysUserName ? '#ffbae9' : '#47daff';
+
+                let innerHtml = `
                     <span class="log-time">${timeStr}</span>
-                    <span class="log-user">${log.user}</span>
-                    <span class="log-action">${log.action}</span>
-                    <span class="log-target">[${log.targetName}]</span>
-                    <span class="log-detail" title="${log.detail}">${log.detail}</span>
+                    <span class="log-user" style="color: ${userColor}">${log.user}</span>
                 `;
+
+                if (isSystem) {
+                    const displayAction = log.action === '系統' ? '' : log.action;
+                    innerHtml += `
+                        <span class="${targetClass}" title="${log.targetName}">${displayAction} [${log.targetName}]</span>
+                    `;
+                    if (log.detail) innerHtml += `<span class="${targetClass}" style="margin-left:4px;">${log.detail}</span>`;
+                } else {
+                    innerHtml += `
+                        <span class="${actionClass}">${log.action}</span>
+                        <span class="${targetClass}" title="${log.targetName}">[${log.targetName}]</span>
+                    `;
+                    if (log.detail) {
+                        innerHtml += `<span class="log-detail">${log.detail}</span>`;
+                    }
+                }
+
+                el.innerHTML = innerHtml;
                 logContent.appendChild(el);
             });
         }
@@ -901,12 +935,12 @@
         .tooltip-line { font-size: 0.8rem; color: #8892b0; margin-bottom: 4px; line-height: 1.4; }
         .tooltip-line span { color: #e6edf3; font-weight: 500; }
 
-        /* 右側操作日誌 Sidebar */
+        /* 右側操作日誌 Sidebar (參考影片庫樣式) */
         .log-sidebar {
             width: 320px;
-            background: var(--card-bg);
-            border: 1px solid #2d455c;
-            border-radius: 12px;
+            background: rgba(0,0,0,0.25);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 4px;
             flex-shrink: 0;
             height: 80vh;
             position: sticky;
@@ -917,46 +951,59 @@
         }
         
         .log-header {
-            padding: 15px;
-            font-weight: bold;
-            font-size: 1.05rem;
-            color: #e6edf3;
-            background: #0f1c2c;
-            border-bottom: 1px solid #2d455c;
+            padding: 8px 10px;
+            font-weight: 900;
+            font-size: 0.75rem;
+            color: rgba(255,255,255,0.5);
+            background: transparent;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
             display: flex;
             align-items: center;
             gap: 8px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
         }
         
         .log-content {
-            padding: 15px;
+            padding: 0 10px 10px 10px;
             overflow-y: auto;
             flex: 1;
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 4px;
+            font-family: monospace;
+            font-size: 13px;
+            color: rgba(255,255,255,0.7);
         }
         
         /* 自訂捲軸完美還原 */
-        .log-content::-webkit-scrollbar { width: 6px; }
-        .log-content::-webkit-scrollbar-track { background: transparent; border-radius: 4px; }
-        .log-content::-webkit-scrollbar-thumb { background: #2d455c; border-radius: 4px; }
-        .log-content::-webkit-scrollbar-thumb:hover { background: #556677; }
+        .log-content::-webkit-scrollbar { width: 4px; height: 4px; }
+        .log-content::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); border-radius: 2px; }
+        .log-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
+        .log-content::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
 
         .log-entry {
-            font-size: 0.85rem;
-            line-height: 1.5;
-            color: #8892b0;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            display: flex;
+            align-items: center;
+            width: 100%;
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            transition: all 0.3s ease;
         }
         
-        .log-time { color: #556677; font-family: monospace; margin-right: 6px; }
-        .log-user { color: #ff4d4f; font-weight: bold; margin-right: 4px; }
-        .log-action { color: #8892b0; margin-right: 4px; }
-        .log-target { color: #e6edf3; margin-right: 4px; }
-        .log-detail { color: #8892b0; }
+        .log-time { color: rgba(255,255,255,0.3); font-size: 10px; margin-right: 4px; flex-shrink: 0; }
+        .log-user { font-weight: bold; font-size: 11.5px; margin-right: 2px; flex-shrink: 0; }
+        .log-action { font-size: 10.5px; margin-right: 2px; flex-shrink: 0; opacity: 0.8; }
+        .log-action.danger { color: #f87171; font-weight: bold; opacity: 1; }
+        .log-target { font-weight: 900; font-size: 11.5px; flex-shrink: 1; min-width: 0; transition: all 0.3s ease; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff; }
+        .log-target.system { color: #4ade80; }
+        .log-detail { color: #67e8f9; font-weight: bold; font-size: 10.5px; padding-right: 8px; flex-shrink: 0; margin-left: 4px; }
+
+        .log-entry.expanded .log-target {
+            white-space: normal;
+            overflow: visible;
+            word-break: break-all;
+        }
 
         /* Modals and Forms */
         .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(10,18,25,0.9); justify-content: center; align-items: center; z-index: 1000; }
@@ -1042,7 +1089,10 @@
         <div class="container">
             <div class="header">
                 <img src="https://i.pinimg.com/736x/d1/b1/1d/d1b11d5e4dbae547ac0d651476cec488.jpg" alt="Logo" class="logo">
-                <h1>玩家統計系統</h1>
+                <div style="display: flex; align-items: baseline; gap: 8px;">
+                    <h1>玩家統計系統</h1>
+                    <span style="font-size: 0.9rem; color: #8892b0; font-weight: bold;">v1.0</span>
+                </div>
             </div>
             <div class="tabs">
                 <button class="tab-btn active" data-tab="players" onclick="switchTab('players')">評級榜</button>
@@ -1112,12 +1162,12 @@
         <div class="log-sidebar">
             <div class="log-header" style="display: flex; justify-content: space-between;">
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffbae9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                     操作日誌
                 </div>
-                <div style="font-size: 0.8rem; color: #8892b0; cursor: pointer; display: flex; align-items: center; gap: 4px; background: #162431; padding: 4px 8px; border-radius: 6px; border: 1px solid #2d455c; transition: all 0.2s;" onclick="openUserNameModal()" onmouseover="this.style.color='#fff'; this.style.borderColor='var(--accent)'" onmouseout="this.style.color='#8892b0'; this.style.borderColor='#2d455c'">
+                <div style="font-size: 10px; color: rgba(255,255,255,0.4); cursor: pointer; display: flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); transition: all 0.2s; background: rgba(0,0,0,0.2);" onclick="openUserNameModal()" onmouseover="this.style.color='#ffbae9'; this.style.borderColor='rgba(255,186,233,0.3)'" onmouseout="this.style.color='rgba(255,255,255,0.4)'; this.style.borderColor='rgba(255,255,255,0.1)'" title="修改操作者名稱">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                     <span id="displayUserName">管理員</span>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                 </div>
             </div>
             <div class="log-content" id="logContent">
