@@ -73,7 +73,21 @@
         window.saveUserName = () => {
             const newName = document.getElementById('newUserNameInput').value.trim();
             const newColor = document.getElementById('newUserColorInput').value;
+            
             if (newName) {
+                const reservedNames = ['管理員', '系統', 'admin', 'godcloud', '站長'];
+                const lowerName = newName.toLowerCase();
+                const isReserved = reservedNames.some(r => lowerName.includes(r));
+                
+                // 如果包含保留字，且當前並未用密碼解鎖(非管理員)，則阻擋命名
+                if (isReserved && !isPlayersTabUnlocked) {
+                    const input = document.getElementById('newUserNameInput');
+                    input.value = '';
+                    input.placeholder = '包含專屬保留字，請換個名稱！';
+                    setTimeout(() => input.placeholder = '輸入您的名稱...', 2500);
+                    return;
+                }
+
                 sysUserName = newName;
                 sysUserColor = newColor;
                 localStorage.setItem('sysUserName', sysUserName);
