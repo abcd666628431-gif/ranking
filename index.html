@@ -47,6 +47,7 @@
 
         const getCol = (col) => collection(db, 'artifacts', appId, 'public', 'data', col);
 
+        let isFirstVisit = !localStorage.getItem('sysUserName'); // 判斷是否為初次進入
         let sysUserName = localStorage.getItem('sysUserName') || '管理員';
         let sysUserColor = localStorage.getItem('sysUserColor') || '#ffbae9';
 
@@ -411,7 +412,7 @@
             closeModal();
             if (id) {
                 await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', activeTab, id), data);
-                writeLog('修改', playerName, `更新了資料內容`);
+                writeLog('修改', playerName, `資料內容`);
             } else {
                 await addDoc(getCol(activeTab), { ...data, order: dataStore[activeTab].length });
                 writeLog('錄入', playerName, `新增資料至系統`);
@@ -486,7 +487,12 @@
             const logFrag = document.createDocumentFragment();
             
             logsStore.forEach(log => {
-                const timeStr = new Date(log.timestamp).toLocaleTimeString('en-US', {hour12: false, hour: '2-digit', minute:'2-digit'});
+                const logDate = new Date(log.timestamp);
+                const timeStr = logDate.toLocaleTimeString('en-US', {hour12: false, hour: '2-digit', minute:'2-digit'});
+                const month = String(logDate.getMonth() + 1).padStart(2, '0');
+                const date = String(logDate.getDate()).padStart(2, '0');
+                const fullTimeStr = `${month}-${date} ${timeStr}`;
+
                 const el = document.createElement('div');
                 el.className = 'log-entry';
                 
@@ -509,7 +515,7 @@
                 const userColor = log.user === sysUserName ? sysUserColor : '#47daff';
 
                 let innerHtml = `
-                    <span class="log-time">${timeStr}</span>
+                    <span class="log-time" title="${fullTimeStr}" style="cursor: help;">${timeStr}</span>
                     <span class="log-user" style="color: ${userColor}">${log.user}</span>
                 `;
 
@@ -793,6 +799,11 @@
                 displayEl.innerText = sysUserName;
                 displayEl.style.color = sysUserColor;
             }
+
+            // 初次進入網站，自動彈出修改名稱視窗
+            if (isFirstVisit) {
+                openUserNameModal();
+            }
         }, 100);
     </script>
     <style>
@@ -1003,9 +1014,9 @@
         /* 右側操作日誌 Sidebar */
         .log-sidebar {
             width: 280px;
-            background: rgba(0,0,0,0.25);
-            border: 1px solid rgba(255,255,255,0.05);
-            border-radius: 4px;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.25); /* 邊框調亮變明顯 */
+            border-radius: 8px;
             flex-shrink: 0;
             height: 80vh;
             position: sticky;
@@ -1013,15 +1024,16 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4); /* 增加陰影突顯區域 */
         }
         
         .log-header {
-            padding: 8px 10px;
+            padding: 10px 12px;
             font-weight: 900;
-            font-size: 0.75rem;
-            color: rgba(255,255,255,0.5);
-            background: transparent;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-size: 0.8rem;
+            color: rgba(255,255,255,0.8); /* 提亮字體 */
+            background: rgba(255,255,255,0.08); /* 稍微帶點背景色 */
+            border-bottom: 1px solid rgba(255,255,255,0.2); /* 底部邊框加亮 */
             display: flex;
             align-items: center;
             gap: 8px;
