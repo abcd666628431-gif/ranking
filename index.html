@@ -34,7 +34,7 @@
         let searchQuery = '';
         let activeView = 'tier'; 
         let dataStore = { players: [], trash: [] };
-        let selectedPos = 'TOP'; 
+        let selectedPos = []; 
         let sortableInstances = [];
         let sortableListInstance = null;
         let isEditMode = false;
@@ -82,7 +82,7 @@
                         window.updateImagePreview(base64Url);
                     };
                     reader.readAsDataURL(file);
-                    e.preventDefault(); // 阻止原本貼上文字的行為
+                    e.preventDefault(); 
                     break;
                 }
             }
@@ -220,8 +220,14 @@
         };
 
         window.selectPos = (pos) => {
-            selectedPos = pos;
-            document.querySelectorAll('.pos-option').forEach(btn => btn.classList.toggle('active', btn.dataset.pos === pos));
+            if (selectedPos.includes(pos)) {
+                selectedPos = selectedPos.filter(p => p !== pos);
+            } else {
+                selectedPos.push(pos);
+            }
+            document.querySelectorAll('.pos-option').forEach(btn => {
+                btn.classList.toggle('active', selectedPos.includes(btn.dataset.pos));
+            });
         };
 
         window.openModal = (id = '') => {
@@ -252,7 +258,19 @@
             }
             document.getElementById('score').value = scoreVal;
             
-            selectPos(p ? p.pos : 'TOP');
+            if (p && p.pos) {
+                if (Array.isArray(p.pos)) {
+                    selectedPos = [...p.pos];
+                } else if (typeof p.pos === 'string') {
+                    selectedPos = p.pos.split(',').map(s => s.trim()).filter(Boolean);
+                }
+            } else {
+                selectedPos = [];
+            }
+
+            document.querySelectorAll('.pos-option').forEach(btn => {
+                btn.classList.toggle('active', selectedPos.includes(btn.dataset.pos));
+            });
             
             document.getElementById('delBtn').style.display = id ? 'block' : 'none';
             document.getElementById('modal').style.display = 'flex';
@@ -349,23 +367,20 @@
 
             if (!tierList || !listNormal) return;
 
-            // 鎖定顯示邏輯 (僅評級榜套用)
             if (activeTab === 'players' && !isPlayersTabUnlocked) {
                 lockOverlay.style.display = 'flex';
-                fabBtn.style.display = 'none'; // 未解鎖時隱藏新增按鈕
+                fabBtn.style.display = 'none'; 
             } else {
                 lockOverlay.style.display = 'none';
-                fabBtn.style.display = 'block'; // 解鎖後或在雷人榜時顯示
+                fabBtn.style.display = 'block'; 
             }
 
-            // 動態稱號邏輯
             const isTrash = activeTab === 'trash';
             const tierLabels = isTrash 
-                ? ['畜生級', '災難級', '危險級', '警戒級', '異常級', '注意級']
+                ? ['毀滅級', '災難級', '危險級', '警戒級', '異常級', '注意級']
                 : ['S+', 'S', 'A', 'B', 'C', 'D'];
             const rankTitle = isTrash ? '雷人指數' : '實力分級';
 
-            // 更新介面上的 Tier 標頭
             document.querySelector('.tier-t0').innerText = tierLabels[0];
             document.querySelector('.tier-t1').innerText = tierLabels[1];
             document.querySelector('.tier-t2').innerText = tierLabels[2];
@@ -373,7 +388,6 @@
             document.querySelector('.tier-t4').innerText = tierLabels[4];
             document.querySelector('.tier-t5').innerText = tierLabels[5];
 
-            // 更新 Modal 表單中的下拉選單與標題
             const scoreSelect = document.getElementById('score');
             if(scoreSelect) {
                 Array.from(scoreSelect.options).forEach((opt, i) => {
@@ -418,11 +432,21 @@
                     const rankLabel = score >= 105 ? tierLabels[0] : score >= 90 ? tierLabels[1] : score >= 75 ? tierLabels[2] : score >= 60 ? tierLabels[3] : score >= 45 ? tierLabels[4] : tierLabels[5];
                     const displayRank = rankLabel.endsWith('級') ? rankLabel : `${rankLabel} 級`;
                     
+                    let posArray = [];
+                    if (Array.isArray(p.pos)) {
+                        posArray = p.pos;
+                    } else if (typeof p.pos === 'string') {
+                        posArray = p.pos.split(',').map(s => s.trim()).filter(Boolean);
+                    }
+                    if (posArray.length === 0) posArray = ['TOP'];
+                    
+                    const posHtml = posArray.map(pos => `<span class="pos-badge" style="background:${POS_COLORS[pos] || '#999'}">${pos}</span>`).join('<span style="width:2px;display:inline-block;"></span>');
+                    
                     row.innerHTML = `
                         <div class="player-card">
                             <div class="card-content">
                                 <div class="card-header" style="margin-bottom: 0;">
-                                    <span class="pos-badge" style="background:${POS_COLORS[p.pos] || '#999'}">${p.pos}</span>
+                                    ${posHtml}
                                     <span class="player-name" style="font-size: 0.85rem; font-weight: normal; margin-left: 4px;">${p.nickName || '-'}</span>
                                 </div>
                             </div>
@@ -431,7 +455,6 @@
                                 <span class="menu-dots" onclick="openModal('${p.id}')" title="編輯">⋮</span>
                             </div>
                             
-                            <!-- 完整信息懸停提示框 -->
                             <div class="card-tooltip">
                                 <div class="tooltip-title">${p.name || '-'}</div>
                                 <div class="tooltip-grid">
@@ -443,7 +466,7 @@
                                     <div class="tooltip-value">${displayRank}</div>
                                     <div class="tooltip-label">位置</div>
                                     <div class="tooltip-value">
-                                        <span class="pos-badge" style="background:${POS_COLORS[p.pos] || '#999'}">${p.pos}</span>
+                                        ${posHtml}
                                     </div>
                                 </div>
                                 <div class="tooltip-line" style="border-top: 1px dashed #2d455c; margin-top: 6px; padding-top: 4px; white-space: normal;">
@@ -486,6 +509,16 @@
                     const rankLabel = score >= 105 ? tierLabels[0] : score >= 90 ? tierLabels[1] : score >= 75 ? tierLabels[2] : score >= 60 ? tierLabels[3] : score >= 45 ? tierLabels[4] : tierLabels[5];
                     const displayRank = rankLabel.endsWith('級') ? rankLabel : `${rankLabel} 級`;
 
+                    let posArray = [];
+                    if (Array.isArray(p.pos)) {
+                        posArray = p.pos;
+                    } else if (typeof p.pos === 'string') {
+                        posArray = p.pos.split(',').map(s => s.trim()).filter(Boolean);
+                    }
+                    if (posArray.length === 0) posArray = ['TOP'];
+                    
+                    const posHtml = posArray.map(pos => `<span class="pos-badge" style="background:${POS_COLORS[pos] || '#999'}">${pos}</span>`).join('<span style="width:2px;display:inline-block;"></span>');
+
                     const dcMerged = [p.dcName, p.dcName2].filter(x => x && x.trim() !== '').join(' / ') || '-';
                     const displayNameCombined = p.nickName ? `${p.name || '-'} (${p.nickName})` : (p.name || '-');
 
@@ -493,8 +526,8 @@
                         <div class="player-card">
                             <div class="card-content">
                                 <div class="card-header">
-                                    <span class="pos-badge" style="background:${POS_COLORS[p.pos] || '#999'}">${p.pos}</span>
-                                    <span class="player-name">${displayNameCombined} ${activeTab === 'players' ? `(${rankLabel})` : ''}</span>
+                                    ${posHtml}
+                                    <span class="player-name" style="margin-left: 4px;">${displayNameCombined} ${activeTab === 'players' ? `(${rankLabel})` : ''}</span>
                                 </div>
                                 <div class="card-footer">DC: ${dcMerged} | ${p.note || '-'}</div>
                             </div>
@@ -504,7 +537,6 @@
                                 <span class="menu-dots" onclick="openModal('${p.id}')" title="編輯">⋮</span>
                             </div>
 
-                            <!-- 列表模式的懸浮 Tooltip -->
                             <div class="card-tooltip">
                                 <div class="tooltip-title">${p.name || '-'}</div>
                                 <div class="tooltip-grid">
@@ -516,7 +548,7 @@
                                     <div class="tooltip-value">${displayRank}</div>
                                     <div class="tooltip-label">位置</div>
                                     <div class="tooltip-value">
-                                        <span class="pos-badge" style="background:${POS_COLORS[p.pos] || '#999'}">${p.pos}</span>
+                                        ${posHtml}
                                     </div>
                                 </div>
                                 <div class="tooltip-line" style="border-top: 1px dashed #2d455c; margin-top: 6px; padding-top: 4px; white-space: normal;">
@@ -545,28 +577,23 @@
     </script>
     <style>
         :root { --bg-color: #0a1219; --card-bg: #111e2a; --text-color: #e6edf3; --accent: #61dafb; --input-bg: #182633; }
-        body { font-family: 'Segoe UI', sans-serif; background: var(--bg-color); color: var(--text-color); padding: 20px; box-sizing: border-box; }
-        /* padding-bottom: 120px 確保新增按鈕不會擋住最下方的內容 */
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg-color); color: var(--text-color); padding: 15px 20px; box-sizing: border-box; }
+        /* padding-bottom 確保新增按鈕不會擋住內容 */
         .container { max-width: 800px; margin: 0 auto; position: relative; padding-bottom: 120px; }
         
-        /* 霧面遮罩 */
-        .lock-overlay { position: absolute; inset: 0; z-index: 90; display: none; justify-content: center; align-items: center; background: rgba(10,18,25,0.2); backdrop-filter: blur(10px); border-radius: 12px; flex-direction: column; gap: 15px; }
-        .lock-icon { font-size: 3rem; }
-        .unlock-btn { padding: 12px 24px; background: var(--accent); color: #0a1219; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
-
-        .header { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
-        .logo { width: 50px; height: 50px; object-fit: cover; border-radius: 8px; border: 1px solid #2d455c; }
+        /* 極致收縮頂部間隙：消除 h1 預設 margin，縮減各元件間距 */
+        .header { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+        .header h1 { margin: 0; font-size: 1.6rem; line-height: 1; }
+        .logo { width: 45px; height: 45px; object-fit: cover; border-radius: 8px; border: 1px solid #2d455c; }
         
-        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
-        .tab-btn { flex: 1; padding: 12px; background: #162431; border: 1px solid #2d455c; color: #8892b0; cursor: pointer; border-radius: 8px; font-weight: bold; }
+        .tabs { display: flex; gap: 8px; margin-bottom: 10px; }
+        .tab-btn { flex: 1; padding: 10px; background: #162431; border: 1px solid #2d455c; color: #8892b0; cursor: pointer; border-radius: 8px; font-weight: bold; font-size: 0.95rem;}
         .tab-btn.active { background: var(--accent); color: #0a1219; }
 
-        /* 搜尋欄與切換按鈕區間 */
-        .search-row { display: flex; gap: 10px; margin-bottom: 20px; align-items: center; }
-        .search-box { flex: 1; padding: 14px; background: var(--input-bg); border: 1px solid #2d455c; border-radius: 8px; color: white; box-sizing: border-box; min-width: 0; }
-        .search-controls { display: flex; align-items: center; gap: 15px; flex-shrink: 0; }
+        .search-row { display: flex; gap: 10px; margin-bottom: 12px; align-items: center; }
+        .search-box { flex: 1; padding: 12px 14px; background: var(--input-bg); border: 1px solid #2d455c; border-radius: 8px; color: white; box-sizing: border-box; min-width: 0; }
+        .search-controls { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
         
-        /* 開關 UI 樣式 */
         .edit-toggle-wrapper { display: flex; align-items: center; gap: 8px; }
         .edit-toggle-label { font-size: 0.9rem; font-weight: bold; color: #8892b0; }
         .switch { position: relative; display: inline-block; width: 44px; height: 24px; margin: 0; }
@@ -577,23 +604,28 @@
         input:checked + .slider:before { transform: translateX(20px); }
 
         .view-switcher { display: flex; gap: 6px; flex-shrink: 0; }
-        .view-btn { padding: 12px 16px; background: #162431; border: 1px solid #2d455c; color: #8892b0; cursor: pointer; border-radius: 8px; font-weight: bold; font-size: 0.9rem; transition: all 0.2s; }
+        .view-btn { padding: 10px 14px; background: #162431; border: 1px solid #2d455c; color: #8892b0; cursor: pointer; border-radius: 8px; font-weight: bold; font-size: 0.9rem; transition: all 0.2s; }
         .view-btn.active { background: var(--accent); color: #0a1219; }
 
-        /* 介面容器 (固定最小高度確保遮罩正常覆蓋) */
-        .list-container { width: 100%; position: relative; min-height: 400px; }
+        /* 介面容器 (遮罩放置於此確保只覆蓋資料區) */
+        .list-container { width: 100%; position: relative; min-height: 400px; border-radius: 12px; }
         
+        /* 霧面遮罩 */
+        .lock-overlay { position: absolute; inset: 0; z-index: 90; display: none; justify-content: center; align-items: center; background: rgba(10,18,25,0.2); backdrop-filter: blur(10px); border-radius: 12px; flex-direction: column; gap: 15px; }
+        .lock-icon { font-size: 3rem; }
+        .unlock-btn { padding: 12px 24px; background: var(--accent); color: #0a1219; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+
         /* 排名列表介面結構 */
         .normal-list-view-layout { display: flex; align-items: flex-start; gap: 10px; width: 100%; }
         .number-column { width: 35px; flex-shrink: 0; }
         .player-list-container { flex: 1; min-width: 0; }
         .static-rank-num { display: flex; align-items: center; justify-content: center; font-weight: bold; color: var(--accent); font-size: 1.1rem; margin-bottom: 12px; user-select: none; -webkit-user-select: none; }
 
-        /* Tier List 介面結構 */
-        .tier-list-container { display: flex; flex-direction: column; gap: 10px; width: 100%; }
-        .tier-row { display: flex; background: #0f1c2c; border: 1px solid #2d455c; border-radius: 12px; min-height: 90px; position: relative; }
-        .tier-header { width: 110px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; text-align: center; font-weight: bold; font-size: 1.2rem; color: #000; padding: 10px; box-sizing: border-box; line-height: 1.3; border-top-left-radius: 11px; border-bottom-left-radius: 11px; }
-        .tier-content { flex: 1; display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; min-height: 70px; background: #111e2a; align-items: center; border-top-right-radius: 11px; border-bottom-right-radius: 11px; }
+        /* Tier List 介面結構 (極致收縮版) */
+        .tier-list-container { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+        .tier-row { display: flex; background: #0f1c2c; border: 1px solid #2d455c; border-radius: 12px; min-height: 76px; position: relative; }
+        .tier-header { width: 110px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; text-align: center; font-weight: bold; font-size: 1.2rem; color: #000; padding: 8px; box-sizing: border-box; line-height: 1.3; border-top-left-radius: 11px; border-bottom-left-radius: 11px; }
+        .tier-content { flex: 1; display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; min-height: 60px; background: #111e2a; align-items: center; border-top-right-radius: 11px; border-bottom-right-radius: 11px; }
 
         .tier-t0 { background-color: #ff4d4f; }
         .tier-t1 { background-color: #ff7f7f; }
@@ -620,7 +652,7 @@
             position: relative; 
         }
         
-        /* 內容區：新增 user-select: none 防止拖曳時文字變藍反白 */
+        /* 內容區：防拖曳反白 */
         .card-content { 
             display: flex; 
             align-items: center; 
@@ -637,7 +669,7 @@
         .player-name { font-weight: bold; font-size: 0.95rem; white-space: nowrap; }
         .card-footer { font-size: 0.8rem; color: #8892b0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         
-        /* 按鈕區：新增 user-select: none 防止操作時反白 */
+        /* 操作區：防拖曳反白 */
         .card-actions { 
             display: none; 
             align-items: center; 
@@ -677,7 +709,7 @@
             -webkit-user-select: text;
         }
         
-        /* 智慧防裁切：上方列的 Tooltip 改為「向下」展開，避免被螢幕頂部切斷 (含大型圖片) */
+        /* 智慧防裁切 */
         #tier-T0 .card-tooltip,
         #tier-T1 .card-tooltip,
         #playerList .list-row:nth-child(-n+3) .card-tooltip {
@@ -702,7 +734,7 @@
             z-index: 1000;
         }
         
-        /* 智慧防裁切的反轉箭頭 (向下指) */
+        /* 智慧防裁切的反轉箭頭 */
         #tier-T0 .card-tooltip::after,
         #tier-T1 .card-tooltip::after,
         #playerList .list-row:nth-child(-n+3) .card-tooltip::after {
@@ -780,19 +812,23 @@
         /* 手機版優化 */
         @media (max-width: 600px) {
             body { padding: 10px; }
+            .header { margin-bottom: 8px; }
             .header h1 { font-size: 1.4rem; }
             .logo { width: 40px; height: 40px; }
+            
+            .tabs { margin-bottom: 8px; }
             .tab-btn { padding: 8px; font-size: 0.9rem; }
             
-            .search-row { flex-direction: column; gap: 10px; align-items: stretch; margin-bottom: 15px; }
+            .search-row { flex-direction: column; gap: 8px; align-items: stretch; margin-bottom: 12px; }
             .search-box { padding: 10px; font-size: 0.9rem; }
-            .search-controls { width: 100%; justify-content: space-between; }
+            .search-controls { width: 100%; justify-content: space-between; gap: 8px; }
             .view-switcher { flex: 1; justify-content: flex-end; }
             .view-btn { text-align: center; padding: 8px 12px; font-size: 0.85rem; }
 
-            .tier-row { min-height: 80px; }
+            .tier-list-container { gap: 6px; }
+            .tier-row { min-height: 68px; }
             .tier-header { width: 85px; font-size: 1.1rem; padding: 6px; }
-            .tier-content { padding: 6px; gap: 6px; }
+            .tier-content { padding: 6px; gap: 4px; min-height: 55px; }
             
             .normal-list-view-layout { gap: 5px; }
             .number-column { width: 25px; }
@@ -816,13 +852,6 @@
 </head>
 <body>
     <div class="container">
-        <!-- 霧面遮罩 (綁定評級榜鎖定功能) -->
-        <div id="lockOverlay" class="lock-overlay">
-            <div class="lock-icon">🔒</div>
-            <p style="font-weight:bold; margin:0;">評級榜已上鎖</p>
-            <button class="unlock-btn" onclick="showPasswordModal()">點擊輸入密碼解鎖</button>
-        </div>
-
         <div class="header">
             <img src="https://i.pinimg.com/736x/d1/b1/1d/d1b11d5e4dbae547ac0d651476cec488.jpg" alt="Logo" class="logo">
             <h1>玩家統計系統</h1>
@@ -847,7 +876,15 @@
                 </div>
             </div>
         </div>
+
         <div class="list-container">
+            <!-- 霧面遮罩 (正確放置於資料區容器內) -->
+            <div id="lockOverlay" class="lock-overlay">
+                <div class="lock-icon">🔒</div>
+                <p style="font-weight:bold; margin:0;">評級榜已上鎖</p>
+                <button class="unlock-btn" onclick="showPasswordModal()">點擊輸入密碼解鎖</button>
+            </div>
+
             <!-- 列表檢視模式 -->
             <div id="listNormal" style="display: none; width: 100%;">
                 <div class="normal-list-view-layout">
@@ -916,7 +953,7 @@
                 <input type="text" id="dcName" style="margin-bottom: 8px;" placeholder="主要 DC 帳號">
                 <input type="text" id="dcName2" placeholder="備用 DC 帳號 (選填)">
             </div>
-            <div class="form-group"><label>位置</label>
+            <div class="form-group"><label>位置 (可多選)</label>
                 <div class="pos-grid">
                     <button class="pos-option" data-pos="MID" onclick="selectPos('MID')" style="color:#ff4d4f">MID</button>
                     <button class="pos-option" data-pos="TOP" onclick="selectPos('TOP')" style="color:#9747FF">TOP</button>
@@ -938,7 +975,6 @@
             </div>
             <div class="form-group"><label>備註</label><textarea id="note"></textarea></div>
             
-            <!-- 支援圖片預覽與貼上的區塊 -->
             <div class="form-group">
                 <label>備註圖片</label>
                 <div id="imgInputContainer">
