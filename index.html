@@ -48,7 +48,7 @@
         const getCol = (col) => collection(db, 'artifacts', appId, 'public', 'data', col);
 
         let isFirstVisit = !localStorage.getItem('sysUserName'); // 判斷是否為初次進入
-        let sysUserName = localStorage.getItem('sysUserName') || '管理員';
+        let sysUserName = localStorage.getItem('sysUserName') || '用戶_' + Math.floor(Math.random() * 900 + 100);
         let sysUserColor = localStorage.getItem('sysUserColor') || '#ffbae9';
 
         window.openUserNameModal = () => {
@@ -638,7 +638,7 @@
                                     <div class="pos-col">
                                         ${posHtml}
                                     </div>
-                                    <span class="player-name" style="font-size: 0.95rem; margin-left: 4px;">${p.nickName || '-'}</span>
+                                    <span class="player-name" style="font-size: 0.85rem; margin-left: 4px;">${p.nickName || '-'}</span>
                                 </div>
                             </div>
                             <div class="card-actions">
@@ -883,7 +883,7 @@
 
         .player-card { 
             background: var(--card-bg); 
-            padding: 8px 12px; 
+            padding: 6px 8px; 
             border-radius: 8px; 
             display: flex; 
             align-items: center; 
@@ -905,8 +905,8 @@
         
         .card-header { display: flex; align-items: center; gap: 6px; white-space: nowrap; font-family: monospace, sans-serif; }
         .pos-col { display: flex; flex-direction: column; gap: 2px; align-items: center; justify-content: center; }
-        .pos-badge { padding: 1px 6px; border-radius: 10px; color: #fff; font-size: 0.65rem; font-weight: 900; min-width: 32px; text-align: center; box-sizing: border-box; line-height: 1.2; letter-spacing: 0.5px; font-family: monospace, sans-serif; }
-        .player-name { font-weight: 900; font-family: monospace, sans-serif; font-size: 1.05rem; white-space: nowrap; letter-spacing: 0.5px; }
+        .pos-badge { padding: 1px 4px; border-radius: 10px; color: #fff; font-size: 0.55rem; font-weight: 900; min-width: 26px; text-align: center; box-sizing: border-box; line-height: 1.2; letter-spacing: 0.5px; font-family: monospace, sans-serif; }
+        .player-name { font-weight: 900; font-family: monospace, sans-serif; font-size: 0.85rem; white-space: nowrap; letter-spacing: 0.5px; }
         .card-footer { font-size: 0.85rem; color: #8892b0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: monospace, sans-serif; font-weight: 900; }
         
         .card-actions { 
@@ -1143,9 +1143,9 @@
             .number-column { width: 25px; }
             .static-rank-num { font-size: 1rem; margin-bottom: 10px; }
 
-            .player-card { padding: 8px 10px; border-radius: 8px; }
-            .player-name { font-size: 0.85rem; }
-            .pos-badge { font-size: 0.6rem; padding: 1px 4px; min-width: 28px; }
+            .player-card { padding: 6px 6px; border-radius: 8px; }
+            .player-name { font-size: 0.75rem; }
+            .pos-badge { font-size: 0.5rem; padding: 1px 3px; min-width: 24px; }
             .card-footer { font-size: 0.75rem; }
             .card-actions { gap: 4px; margin-left: 4px; }
             .drag-handle, .menu-dots { font-size: 1rem; padding: 1px; }
@@ -1339,7 +1339,7 @@
     <!-- 使用者名稱設定 Modal -->
     <div class="modal" id="userNameModal" style="z-index: 3000;">
         <div class="modal-content" style="text-align: center; width: 90%; max-width: 320px;">
-            <h2 style="margin-top:0; color:#fff;">修改操作者設定</h2>
+            <h2 style="margin-top:0; color:#fff;">設定操作者名稱</h2>
             <div class="form-group">
                 <input type="text" id="newUserNameInput" placeholder="輸入您的名稱..." style="text-align: center; font-size: 1.1rem; padding: 12px; font-weight: bold;">
             </div>
@@ -1348,8 +1348,7 @@
                 <input type="color" id="newUserColorInput" style="width: 40px; height: 30px; padding: 0; border: none; border-radius: 4px; cursor: pointer; background: transparent;">
             </div>
             <div style="display:flex; justify-content:center; gap:10px; margin-top: 20px;">
-                <button onclick="closeUserNameModal()" style="padding:10px 20px; background:#2d455c; border:none; border-radius:6px; color:#fff; cursor:pointer;">取消</button>
-                <button onclick="saveUserName()" style="padding:10px 20px; background:var(--accent); border:none; border-radius:6px; color:#000; font-weight:bold; cursor:pointer;">儲存設定</button>
+                <button onclick="saveUserName()" style="padding:10px 40px; background:var(--accent); border:none; border-radius:6px; color:#000; font-weight:bold; cursor:pointer;">儲存設定</button>
             </div>
         </div>
     </div>
