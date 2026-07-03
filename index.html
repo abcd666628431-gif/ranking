@@ -91,7 +91,6 @@
         window.openUserNameModal = () => {
             document.getElementById('newUserNameInput').value = sysUserName;
             document.getElementById('newUserColorInput').value = sysUserColor;
-            document.getElementById('newUserPwdInput').value = ''; // 每次開啟清空密碼
             document.getElementById('userNameModal').style.display = 'flex';
         };
 
@@ -103,27 +102,19 @@
         window.saveUserName = async () => {
             const newName = document.getElementById('newUserNameInput').value.trim();
             const newColor = document.getElementById('newUserColorInput').value;
-            const pwd = document.getElementById('newUserPwdInput').value.trim();
             
             if (newName) {
                 let roleToSet = 'guest';
 
-                if (pwd === 'godcloud') {
+                // 神雲專屬通道：直接獲得最高權限
+                if (newName === '神雲') {
                     roleToSet = 'admin';
                 } else {
                     const userRecord = sysUsersStore.find(u => u.username === newName);
                     if (userRecord) {
-                        if (pwd === userRecord.password) {
-                            roleToSet = userRecord.role;
-                        } else {
-                            const input = document.getElementById('newUserNameInput');
-                            input.value = '';
-                            input.placeholder = '此名稱已被註冊，密碼錯誤！';
-                            setTimeout(() => input.placeholder = '輸入您的名稱...', 2500);
-                            return; 
-                        }
+                        roleToSet = userRecord.role;
                     } else {
-                        const reservedNames = ['管理員', '系統', 'admin', 'godcloud', '站長'];
+                        const reservedNames = ['管理員', '系統', 'admin', '站長'];
                         const lowerName = newName.toLowerCase();
                         const isReserved = reservedNames.some(r => lowerName.includes(r));
                         
@@ -425,7 +416,6 @@
                 row.innerHTML = `
                     <div style="font-family:monospace; font-size:12px;">
                         <strong style="color:#fff; font-size:14px;">${u.username}</strong> 
-                        <span style="margin-left:10px; color:#8892b0;">[密碼: ${u.password}]</span> 
                         <span style="margin-left:10px;">身分: ${roleName}</span>
                     </div>
                     <button onclick="deleteSysUser('${u.id}')" style="background:#ff4d4f; border:none; padding:6px 12px; border-radius:4px; color:#fff; cursor:pointer; font-weight:bold; font-size:11px;">移除</button>
@@ -448,9 +438,8 @@
 
         window.saveSysUser = async () => {
             const name = document.getElementById('sysAddName').value.trim();
-            const pwd = document.getElementById('sysAddPwd').value.trim();
             const role = document.getElementById('sysAddRole').value;
-            if (!name || !pwd) return;
+            if (!name) return;
             
             if (sysUsersStore.some(u => u.username === name)) {
                 const input = document.getElementById('sysAddName');
@@ -461,9 +450,8 @@
             }
 
             try {
-                await addDoc(getCol('sys_users'), { username: name, password: pwd, role: role });
+                await addDoc(getCol('sys_users'), { username: name, role: role });
                 document.getElementById('sysAddName').value = '';
-                document.getElementById('sysAddPwd').value = '';
             } catch(e) { console.error(e); }
         };
 
@@ -1463,7 +1451,6 @@
             
             <div style="display:flex; gap:8px; margin-bottom:15px;">
                 <input type="text" id="sysAddName" placeholder="使用者名稱 (ID)" style="flex:1; font-weight:bold;">
-                <input type="text" id="sysAddPwd" placeholder="設定登入密碼" style="flex:1; font-weight:bold;">
                 <select id="sysAddRole" style="width:90px; font-weight:bold; padding:8px;">
                     <option value="member">會員</option>
                     <option value="admin">管理員</option>
@@ -1561,9 +1548,6 @@
             <h2 style="margin-top:0; color:#fff;">個人資料與登入</h2>
             <div class="form-group">
                 <input type="text" id="newUserNameInput" placeholder="輸入您的名稱..." style="text-align: center; font-size: 1.1rem; padding: 12px; font-weight: bold;">
-            </div>
-            <div class="form-group" style="position: relative;">
-                <input type="password" id="newUserPwdInput" placeholder="密碼 (無註冊者留空)" style="text-align: center; font-size: 1.1rem; padding: 12px; font-weight: bold;">
             </div>
             <div class="form-group" style="display: flex; align-items: center; justify-content: center; gap: 10px; background: var(--input-bg); border: 1px solid #2d455c; padding: 10px; border-radius: 6px;">
                 <label style="margin: 0; color: #8892b0; font-size: 0.95rem; font-weight: bold;">專屬顯示顏色</label>
