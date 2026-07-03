@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>英雄聯盟-統計系統</title>
-    <!-- 加入網頁圖示 (Favicon) -->
     <link rel="icon" href="https://i.pinimg.com/736x/d1/b1/1d/d1b11d5e4dbae547ac0d651476cec488.jpg" type="image/jpeg">
     <link rel="shortcut icon" href="https://i.pinimg.com/736x/d1/b1/1d/d1b11d5e4dbae547ac0d651476cec488.jpg" type="image/jpeg">
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
     <script type="module">
         import { initializeApp } from "https://gs.jurieo.com/gemini/gstatic/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, collection, doc, updateDoc, onSnapshot, addDoc, deleteDoc } from "https://gs.jurieo.com/gemini/gstatic/firebasejs/11.6.1/firebase-firestore.js";
+        // 新增引入 query, orderBy, limit 用於日誌排序與抓取限制
+        import { getFirestore, collection, doc, updateDoc, onSnapshot, addDoc, deleteDoc, query, orderBy, limit } from "https://gs.jurieo.com/gemini/gstatic/firebasejs/11.6.1/firebase-firestore.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://gs.jurieo.com/gemini/gstatic/firebasejs/11.6.1/firebase-auth.js";
 
         const userConfig = {
@@ -34,6 +34,7 @@
         let searchQuery = '';
         let activeView = 'tier'; 
         let dataStore = { players: [], trash: [] };
+        let logsStore = []; // 存放日誌資料
         let selectedPos = []; 
         let sortableInstances = [];
         let sortableListInstance = null;
@@ -43,7 +44,19 @@
 
         const getCol = (col) => collection(db, 'artifacts', appId, 'public', 'data', col);
 
-        // --- 圖片預覽與貼上邏輯 ---
+        // 寫入操作日誌函式
+        window.writeLog = async (action, targetName, detail) => {
+            try {
+                await addDoc(getCol('logs'), {
+                    timestamp: Date.now(),
+                    user: '管理員',
+                    action: action,
+                    targetName: targetName || '未知',
+                    detail: detail || ''
+                });
+            } catch(e) { console.error('Log write error:', e); }
+        };
+
         window.updateImagePreview = (url) => {
             const previewCont = document.getElementById('imgPreviewContainer');
             const img = document.getElementById('imgPreview');
@@ -52,7 +65,6 @@
             if (url && url.trim() !== '') {
                 img.src = url;
                 previewCont.style.display = 'block';
-                // 如果是 base64 (貼上的截圖)，隱藏輸入框讓畫面更乾淨
                 if (url.startsWith('data:image')) {
                     inputCont.style.display = 'none';
                 } else {
@@ -88,6 +100,16 @@
             }
         };
 
+        function getRankLabelByScore(score, tab) {
+            const labels = tab === 'trash' ? ['畜生', '災難', '危險', '警戒', '異常', '注意'] : ['S+', 'S', 'A', 'B', 'C', 'D'];
+            if (score >= 105) return labels[0];
+            if (score >= 90) return labels[1];
+            if (score >= 75) return labels[2];
+            if (score >= 60) return labels[3];
+            if (score >= 45) return labels[4];
+            return labels[5];
+        }
+
         function initSortable() {
             sortableInstances.forEach(inst => inst.destroy());
             sortableInstances = [];
@@ -108,13 +130,26 @@
                         const id = evt.item.dataset.id;
                         const toTier = evt.to.dataset.tier;
                         const newOrder = evt.newIndex;
-                        let newScore = parseInt(evt.item.dataset.score) || 0;
+                        
+                        const p = dataStore[currentTab].find(x => x.id === id);
+                        let oldScore = p ? (p.score || 0) : parseInt(evt.item.dataset.score) || 0;
+                        let newScore = oldScore;
+
                         if (toTier === 'T0' && newScore < 105) newScore = 110;
                         else if (toTier === 'T1' && (newScore < 90 || newScore >= 105)) newScore = 95;
                         else if (toTier === 'T2' && (newScore < 75 || newScore >= 90)) newScore = 80;
                         else if (toTier === 'T3' && (newScore < 60 || newScore >= 75)) newScore = 65;
                         else if (toTier === 'T4' && (newScore < 45 || newScore >= 60)) newScore = 50;
                         else if (toTier === 'T5' && newScore >= 45) newScore = 35;
+
+                        if (oldScore !== newScore && p) {
+                            const oldRank = getRankLabelByScore(oldScore, currentTab);
+                            const newRank = getRankLabelByScore(newScore, currentTab);
+                            if(oldRank !== newRank) {
+                                writeLog('調整', p.name, `由 ${oldRank}級 移至 ${newRank}級`);
+                            }
+                        }
+
                         const docRef = doc(db, 'artifacts', appId, 'public', 'data', currentTab, id);
                         await updateDoc(docRef, { order: newOrder, score: newScore });
                     }
@@ -145,6 +180,7 @@
 
         onAuthStateChanged(auth, (user) => {
             if (!user) return;
+            // 載入玩家與雷人名單
             ['players', 'trash'].forEach(col => {
                 onSnapshot(getCol(col), (snapshot) => {
                     dataStore[col] = [];
@@ -153,6 +189,13 @@
                     render();
                 }, (err) => console.error("Firestore Error:", err));
             });
+
+            // 載入操作日誌 (最多顯示最新 50 筆)
+            onSnapshot(query(getCol('logs'), orderBy('timestamp', 'desc'), limit(50)), (snapshot) => {
+                logsStore = [];
+                snapshot.forEach(d => logsStore.push({ id: d.id, ...d.data() }));
+                renderLogs();
+            }, (err) => console.error("Logs Error:", err));
         });
 
         window.toggleEditMode = (checked) => {
@@ -203,6 +246,7 @@
             if (pwd === 'GodCloud') {
                 isPlayersTabUnlocked = true;
                 localStorage.setItem('isUnlocked', 'true');
+                writeLog('解鎖', '系統', '已解鎖評級榜編輯權限');
                 closePasswordModal();
                 render();
             } else {
@@ -281,6 +325,8 @@
         window.savePlayer = async () => {
             const id = document.getElementById('editId').value;
             const scoreSelect = document.getElementById('score').value;
+            const playerName = document.getElementById('name').value || '未知玩家';
+            
             let scoreNum = 35;
             if (scoreSelect === 'S+') scoreNum = 110;
             else if (scoreSelect === 'S') scoreNum = 95;
@@ -290,7 +336,7 @@
             else if (scoreSelect === 'D') scoreNum = 35;
 
             const data = {
-                name: document.getElementById('name').value,
+                name: playerName,
                 nickName: document.getElementById('nickName').value || '',
                 dcName: document.getElementById('dcName').value,
                 dcName2: document.getElementById('dcName2').value || '',
@@ -302,14 +348,18 @@
             closeModal();
             if (id) {
                 await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', activeTab, id), data);
+                writeLog('修改', playerName, `更新了資料內容`);
             } else {
                 await addDoc(getCol(activeTab), { ...data, order: dataStore[activeTab].length });
+                writeLog('錄入', playerName, `新增資料至系統`);
             }
         };
 
         window.deletePlayer = async () => {
             const id = document.getElementById('editId').value;
             if (!id) return;
+            
+            const p = dataStore[activeTab].find(x => x.id === id);
             
             const isConfirmed = await new Promise(resolve => {
                 const overlay = document.createElement('div');
@@ -331,6 +381,7 @@
             if (isConfirmed) {
                 try {
                     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', activeTab, id));
+                    if (p) writeLog('刪除', p.name || '未知', '移除了該筆資料');
                     closeModal();
                 } catch (e) {
                     const toast = document.createElement('div');
@@ -358,6 +409,26 @@
                 numCol.appendChild(numDiv);
             });
         }
+        
+        function renderLogs() {
+            const logContent = document.getElementById('logContent');
+            if (!logContent) return;
+            logContent.innerHTML = '';
+            
+            logsStore.forEach(log => {
+                const timeStr = new Date(log.timestamp).toLocaleTimeString('en-US', {hour12: false, hour: '2-digit', minute:'2-digit'});
+                const el = document.createElement('div');
+                el.className = 'log-entry';
+                el.innerHTML = `
+                    <span class="log-time">${timeStr}</span>
+                    <span class="log-user">${log.user}</span>
+                    <span class="log-action">${log.action}</span>
+                    <span class="log-target">[${log.targetName}]</span>
+                    <span class="log-detail" title="${log.detail}">${log.detail}</span>
+                `;
+                logContent.appendChild(el);
+            });
+        }
 
         function render() {
             const tierList = document.getElementById('tierList');
@@ -377,16 +448,16 @@
 
             const isTrash = activeTab === 'trash';
             const tierLabels = isTrash 
-                ? ['毀滅級', '災難級', '危險級', '警戒級', '異常級', '注意級']
+                ? ['畜生級', '災難級', '危險級', '警戒級', '異常級', '注意級']
                 : ['S+', 'S', 'A', 'B', 'C', 'D'];
             const rankTitle = isTrash ? '雷人指數' : '實力分級';
 
-            document.querySelector('.tier-t0').innerText = tierLabels[0];
-            document.querySelector('.tier-t1').innerText = tierLabels[1];
-            document.querySelector('.tier-t2').innerText = tierLabels[2];
-            document.querySelector('.tier-t3').innerText = tierLabels[3];
-            document.querySelector('.tier-t4').innerText = tierLabels[4];
-            document.querySelector('.tier-t5').innerText = tierLabels[5];
+            document.querySelector('.tier-t0').innerText = tierLabels[0].replace('級', '');
+            document.querySelector('.tier-t1').innerText = tierLabels[1].replace('級', '');
+            document.querySelector('.tier-t2').innerText = tierLabels[2].replace('級', '');
+            document.querySelector('.tier-t3').innerText = tierLabels[3].replace('級', '');
+            document.querySelector('.tier-t4').innerText = tierLabels[4].replace('級', '');
+            document.querySelector('.tier-t5').innerText = tierLabels[5].replace('級', '');
 
             const scoreSelect = document.getElementById('score');
             if(scoreSelect) {
@@ -577,11 +648,27 @@
     </script>
     <style>
         :root { --bg-color: #0a1219; --card-bg: #111e2a; --text-color: #e6edf3; --accent: #61dafb; --input-bg: #182633; }
-        body { font-family: 'Segoe UI', sans-serif; background: var(--bg-color); color: var(--text-color); padding: 15px 20px; box-sizing: border-box; }
-        /* padding-bottom 確保新增按鈕不會擋住內容 */
-        .container { max-width: 800px; margin: 0 auto; position: relative; padding-bottom: 120px; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg-color); color: var(--text-color); padding: 20px; box-sizing: border-box; margin: 0; }
         
-        /* 極致收縮頂部間隙：消除 h1 預設 margin，縮減各元件間距 */
+        /* 全新雙欄版面配置 */
+        .main-wrapper { 
+            display: flex; 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            gap: 20px; 
+            align-items: flex-start; 
+            padding-bottom: 120px; 
+        }
+        
+        /* 左側主介面容器 */
+        .container { 
+            flex: 1; 
+            min-width: 0; /* 防止子元素撐破 flex */
+            max-width: 850px;
+            position: relative; 
+        }
+        
+        /* 緊湊控制列設計 */
         .header { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
         .header h1 { margin: 0; font-size: 1.6rem; line-height: 1; }
         .logo { width: 45px; height: 45px; object-fit: cover; border-radius: 8px; border: 1px solid #2d455c; }
@@ -607,21 +694,17 @@
         .view-btn { padding: 10px 14px; background: #162431; border: 1px solid #2d455c; color: #8892b0; cursor: pointer; border-radius: 8px; font-weight: bold; font-size: 0.9rem; transition: all 0.2s; }
         .view-btn.active { background: var(--accent); color: #0a1219; }
 
-        /* 介面容器 (遮罩放置於此確保只覆蓋資料區) */
         .list-container { width: 100%; position: relative; min-height: 400px; border-radius: 12px; }
         
-        /* 霧面遮罩 */
         .lock-overlay { position: absolute; inset: 0; z-index: 90; display: none; justify-content: center; align-items: center; background: rgba(10,18,25,0.2); backdrop-filter: blur(10px); border-radius: 12px; flex-direction: column; gap: 15px; }
         .lock-icon { font-size: 3rem; }
         .unlock-btn { padding: 12px 24px; background: var(--accent); color: #0a1219; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
 
-        /* 排名列表介面結構 */
         .normal-list-view-layout { display: flex; align-items: flex-start; gap: 10px; width: 100%; }
         .number-column { width: 35px; flex-shrink: 0; }
         .player-list-container { flex: 1; min-width: 0; }
         .static-rank-num { display: flex; align-items: center; justify-content: center; font-weight: bold; color: var(--accent); font-size: 1.1rem; margin-bottom: 12px; user-select: none; -webkit-user-select: none; }
 
-        /* Tier List 介面結構 (極致收縮版) */
         .tier-list-container { display: flex; flex-direction: column; gap: 6px; width: 100%; }
         .tier-row { display: flex; background: #0f1c2c; border: 1px solid #2d455c; border-radius: 12px; min-height: 76px; position: relative; }
         .tier-header { width: 110px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; text-align: center; font-weight: bold; font-size: 1.2rem; color: #000; padding: 8px; box-sizing: border-box; line-height: 1.3; border-top-left-radius: 11px; border-bottom-left-radius: 11px; }
@@ -640,7 +723,6 @@
         .sortable-ghost .player-card { background: transparent !important; border: 2px dashed #2d455c !important; }
         .sortable-ghost .player-card * { visibility: hidden !important; }
 
-        /* 卡片本體 */
         .player-card { 
             background: var(--card-bg); 
             padding: 8px 12px; 
@@ -652,7 +734,6 @@
             position: relative; 
         }
         
-        /* 內容區：防拖曳反白 */
         .card-content { 
             display: flex; 
             align-items: center; 
@@ -669,7 +750,6 @@
         .player-name { font-weight: bold; font-size: 0.95rem; white-space: nowrap; }
         .card-footer { font-size: 0.8rem; color: #8892b0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         
-        /* 操作區：防拖曳反白 */
         .card-actions { 
             display: none; 
             align-items: center; 
@@ -686,7 +766,6 @@
         .menu-dots { font-size: 1.1rem; cursor: pointer; padding: 2px; transition: color 0.2s ease; user-select: none; -webkit-user-select: none; }
         .menu-dots:hover { color: var(--accent); }
         
-        /* 完整信息提示框 (Tooltip) */
         .card-tooltip {
             display: none;
             position: absolute;
@@ -704,12 +783,10 @@
             box-sizing: border-box;
             text-align: left;
             margin-bottom: 10px;
-            /* 讓提示框內的文字可以正常選取複製 */
             user-select: text;
             -webkit-user-select: text;
         }
         
-        /* 智慧防裁切 */
         #tier-T0 .card-tooltip,
         #tier-T1 .card-tooltip,
         #playerList .list-row:nth-child(-n+3) .card-tooltip {
@@ -719,7 +796,6 @@
             margin-top: 10px;
         }
         
-        /* 預設向上指的箭頭 */
         .card-tooltip::after {
             content: '';
             position: absolute;
@@ -734,7 +810,6 @@
             z-index: 1000;
         }
         
-        /* 智慧防裁切的反轉箭頭 */
         #tier-T0 .card-tooltip::after,
         #tier-T1 .card-tooltip::after,
         #playerList .list-row:nth-child(-n+3) .card-tooltip::after {
@@ -747,7 +822,6 @@
             border-left: 1px solid var(--accent);
         }
         
-        /* 預設透明橋樑 */
         .card-tooltip::before {
             content: '';
             position: absolute;
@@ -758,7 +832,6 @@
             background: transparent;
         }
         
-        /* 智慧防裁切的反轉橋樑 */
         #tier-T0 .card-tooltip::before,
         #tier-T1 .card-tooltip::before,
         #playerList .list-row:nth-child(-n+3) .card-tooltip::before {
@@ -777,6 +850,64 @@
         .tooltip-line { font-size: 0.8rem; color: #8892b0; margin-bottom: 4px; line-height: 1.4; }
         .tooltip-line span { color: #e6edf3; font-weight: 500; }
 
+        /* 右側操作日誌 Sidebar */
+        .log-sidebar {
+            width: 320px;
+            background: var(--card-bg);
+            border: 1px solid #2d455c;
+            border-radius: 12px;
+            flex-shrink: 0;
+            height: 80vh;
+            position: sticky;
+            top: 20px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .log-header {
+            padding: 15px;
+            font-weight: bold;
+            font-size: 1.05rem;
+            color: #e6edf3;
+            background: #0f1c2c;
+            border-bottom: 1px solid #2d455c;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .log-content {
+            padding: 15px;
+            overflow-y: auto;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        /* 自訂捲軸完美還原 */
+        .log-content::-webkit-scrollbar { width: 6px; }
+        .log-content::-webkit-scrollbar-track { background: transparent; border-radius: 4px; }
+        .log-content::-webkit-scrollbar-thumb { background: #2d455c; border-radius: 4px; }
+        .log-content::-webkit-scrollbar-thumb:hover { background: #556677; }
+
+        .log-entry {
+            font-size: 0.85rem;
+            line-height: 1.5;
+            color: #8892b0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .log-time { color: #556677; font-family: monospace; margin-right: 6px; }
+        .log-user { color: #ff4d4f; font-weight: bold; margin-right: 4px; }
+        .log-action { color: #8892b0; margin-right: 4px; }
+        .log-target { color: #e6edf3; margin-right: 4px; }
+        .log-detail { color: #8892b0; }
+
+        /* Modals and Forms */
         .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(10,18,25,0.9); justify-content: center; align-items: center; z-index: 1000; }
         .modal-content { background: var(--card-bg); padding: 25px; border-radius: 16px; width: 90%; max-width: 400px; border: 1px solid #2d455c; max-height: 90vh; overflow-y: auto; }
         
@@ -803,15 +934,20 @@
         .fab { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 500px; padding: 16px; background: var(--accent); color: #0a1219; border: none; border-radius: 50px; font-weight: bold; box-shadow: 0 4px 15px rgba(0,0,0,0.5); z-index: 50; cursor: pointer; }
         .btn-del { background: #ff4d4f !important; color: white !important; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; }
 
-        /* 圖片預覽區塊樣式 */
         .img-preview-box { position: relative; margin-top: 8px; border-radius: 6px; background: #0d1a24; border: 1px dashed #2d455c; padding: 10px; text-align: center; }
         .img-preview-box img { max-width: 100%; max-height: 160px; border-radius: 4px; object-fit: contain; }
         .img-preview-remove { position: absolute; top: -8px; right: -8px; background: #ff4d4f; color: white; border: none; border-radius: 50%; width: 24px; height: 24px; font-size: 14px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
         .img-preview-remove:hover { background: #ff7875; }
 
-        /* 手機版優化 */
+        @media (max-width: 900px) {
+            .main-wrapper { flex-direction: column; padding-bottom: 120px; }
+            .log-sidebar { width: 100%; position: relative; top: 0; height: 350px; }
+            .container { max-width: 100%; }
+        }
+
         @media (max-width: 600px) {
             body { padding: 10px; }
+            .main-wrapper { padding-bottom: 100px; }
             .header { margin-bottom: 8px; }
             .header h1 { font-size: 1.4rem; }
             .logo { width: 40px; height: 40px; }
@@ -851,81 +987,90 @@
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <img src="https://i.pinimg.com/736x/d1/b1/1d/d1b11d5e4dbae547ac0d651476cec488.jpg" alt="Logo" class="logo">
-            <h1>玩家統計系統</h1>
-        </div>
-        <div class="tabs">
-            <button class="tab-btn active" data-tab="players" onclick="switchTab('players')">評級榜</button>
-            <button class="tab-btn" data-tab="trash" onclick="switchTab('trash')">雷人榜</button>
-        </div>
-        <div class="search-row">
-            <input type="text" class="search-box" placeholder="🔍 搜尋 ID 或 DC..." oninput="updateSearch(this.value)">
-            <div class="search-controls">
-                <div class="edit-toggle-wrapper">
-                    <span class="edit-toggle-label">編輯</span>
-                    <label class="switch">
-                        <input type="checkbox" id="editModeToggle" onchange="toggleEditMode(this.checked)">
-                        <span class="slider round"></span>
-                    </label>
-                </div>
-                <div class="view-switcher">
-                    <button class="view-btn active" data-view="tier" onclick="switchView('tier')">分級模式</button>
-                    <button class="view-btn" data-view="list" onclick="switchView('list')">排名列表</button>
-                </div>
+    <div class="main-wrapper">
+        <div class="container">
+            <div class="header">
+                <img src="https://i.pinimg.com/736x/d1/b1/1d/d1b11d5e4dbae547ac0d651476cec488.jpg" alt="Logo" class="logo">
+                <h1>玩家統計系統</h1>
             </div>
-        </div>
-
-        <div class="list-container">
-            <!-- 霧面遮罩 (正確放置於資料區容器內) -->
-            <div id="lockOverlay" class="lock-overlay">
-                <div class="lock-icon">🔒</div>
-                <p style="font-weight:bold; margin:0;">評級榜已上鎖</p>
-                <button class="unlock-btn" onclick="showPasswordModal()">點擊輸入密碼解鎖</button>
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="players" onclick="switchTab('players')">評級榜</button>
+                <button class="tab-btn" data-tab="trash" onclick="switchTab('trash')">雷人榜</button>
             </div>
-
-            <!-- 列表檢視模式 -->
-            <div id="listNormal" style="display: none; width: 100%;">
-                <div class="normal-list-view-layout">
-                    <div id="numberColumn" class="number-column"></div>
-                    <div id="playerList" class="player-list-container"></div>
+            <div class="search-row">
+                <input type="text" class="search-box" placeholder="🔍 搜尋 ID 或 DC..." oninput="updateSearch(this.value)">
+                <div class="search-controls">
+                    <div class="edit-toggle-wrapper">
+                        <span class="edit-toggle-label">編輯</span>
+                        <label class="switch">
+                            <input type="checkbox" id="editModeToggle" onchange="toggleEditMode(this.checked)">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                    <div class="view-switcher">
+                        <button class="view-btn active" data-view="tier" onclick="switchView('tier')">分級模式</button>
+                        <button class="view-btn" data-view="list" onclick="switchView('list')">排名列表</button>
+                    </div>
                 </div>
             </div>
 
-            <!-- Tier List 區間分級介面 -->
-            <div id="tierList" class="tier-list-container">
-                <div class="tier-row">
-                    <div class="tier-header tier-t0">S+</div>
-                    <div id="tier-T0" class="tier-content" data-tier="T0"></div>
+            <div class="list-container">
+                <div id="lockOverlay" class="lock-overlay">
+                    <div class="lock-icon">🔒</div>
+                    <p style="font-weight:bold; margin:0;">評級榜已上鎖</p>
+                    <button class="unlock-btn" onclick="showPasswordModal()">點擊輸入密碼解鎖</button>
                 </div>
-                <div class="tier-row">
-                    <div class="tier-header tier-t1">S</div>
-                    <div id="tier-T1" class="tier-content" data-tier="T1"></div>
+
+                <div id="listNormal" style="display: none; width: 100%;">
+                    <div class="normal-list-view-layout">
+                        <div id="numberColumn" class="number-column"></div>
+                        <div id="playerList" class="player-list-container"></div>
+                    </div>
                 </div>
-                <div class="tier-row">
-                    <div class="tier-header tier-t2">A</div>
-                    <div id="tier-T2" class="tier-content" data-tier="T2"></div>
+
+                <div id="tierList" class="tier-list-container">
+                    <div class="tier-row">
+                        <div class="tier-header tier-t0">S+</div>
+                        <div id="tier-T0" class="tier-content" data-tier="T0"></div>
+                    </div>
+                    <div class="tier-row">
+                        <div class="tier-header tier-t1">S</div>
+                        <div id="tier-T1" class="tier-content" data-tier="T1"></div>
+                    </div>
+                    <div class="tier-row">
+                        <div class="tier-header tier-t2">A</div>
+                        <div id="tier-T2" class="tier-content" data-tier="T2"></div>
+                    </div>
+                    <div class="tier-row">
+                        <div class="tier-header tier-t3">B</div>
+                        <div id="tier-T3" class="tier-content" data-tier="T3"></div>
+                    </div>
+                    <div class="tier-row">
+                        <div class="tier-header tier-t4">C</div>
+                        <div id="tier-T4" class="tier-content" data-tier="T4"></div>
+                    </div>
+                    <div class="tier-row">
+                        <div class="tier-header tier-t5">D</div>
+                        <div id="tier-T5" class="tier-content" data-tier="T5"></div>
+                    </div>
                 </div>
-                <div class="tier-row">
-                    <div class="tier-header tier-t3">B</div>
-                    <div id="tier-T3" class="tier-content" data-tier="T3"></div>
-                </div>
-                <div class="tier-row">
-                    <div class="tier-header tier-t4">C</div>
-                    <div id="tier-T4" class="tier-content" data-tier="T4"></div>
-                </div>
-                <div class="tier-row">
-                    <div class="tier-header tier-t5">D</div>
-                    <div id="tier-T5" class="tier-content" data-tier="T5"></div>
-                </div>
+            </div>
+        </div>
+        
+        <!-- 操作日誌側邊欄 -->
+        <div class="log-sidebar">
+            <div class="log-header">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                操作日誌
+            </div>
+            <div class="log-content" id="logContent">
+                <!-- 日誌項目將在此動態載入 -->
             </div>
         </div>
     </div>
     
     <button class="fab" onclick="openModal()">+ 新增玩家</button>
     
-    <!-- 密碼解鎖視窗 -->
     <div class="modal" id="passwordModal" style="z-index: 3000;">
         <div class="modal-content" style="text-align: center;">
             <h2 style="margin-top:0; color:#fff;">請輸入密碼</h2>
@@ -941,7 +1086,6 @@
         </div>
     </div>
 
-    <!-- 編輯/新增資料視窗 -->
     <div class="modal" id="modal">
         <div class="modal-content">
             <h2 style="margin-top:0; color:#fff;">編輯資料</h2>
