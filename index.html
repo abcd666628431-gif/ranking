@@ -496,13 +496,11 @@
                 const el = document.createElement('div');
                 el.className = 'log-entry';
                 
-                // 完美實作：懸停延遲 0.5 秒展開
-                let timer;
+                // 完美實作：移除延遲，直接展開
                 el.addEventListener('mouseenter', () => {
-                    timer = setTimeout(() => el.classList.add('expanded'), 500);
+                    el.classList.add('expanded');
                 });
                 el.addEventListener('mouseleave', () => {
-                    if (timer) clearTimeout(timer);
                     el.classList.remove('expanded');
                 });
 
