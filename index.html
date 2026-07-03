@@ -38,6 +38,15 @@
         
         let dataStore = { players: [], trash: [] };
         let logsStore = []; // 存放日誌資料
+
+        // 🚀 性能優化：F5 刷新秒載入，讀取本地快取避免畫面閃爍
+        try {
+            const cachedData = localStorage.getItem('lol_cache_dataStore');
+            if (cachedData) dataStore = JSON.parse(cachedData);
+            const cachedLogs = localStorage.getItem('lol_cache_logsStore');
+            if (cachedLogs) logsStore = JSON.parse(cachedLogs);
+        } catch(e) {}
+
         let selectedPos = []; 
         let sortableInstances = [];
         let sortableListInstance = null;
@@ -227,19 +236,30 @@
             // 載入玩家與雷人名單
             ['players', 'trash'].forEach(col => {
                 onSnapshot(getCol(col), (snapshot) => {
-                    dataStore[col] = [];
-                    snapshot.forEach(d => dataStore[col].push({ id: d.id, ...d.data() }));
-                    dataStore[col].sort((a, b) => (a.order || 0) - (b.order || 0));
-                    // 性能優化：只在資料變動屬於當前頁籤時，才觸發重繪
-                    if (activeTab === col) render();
+                    let newData = [];
+                    snapshot.forEach(d => newData.push({ id: d.id, ...d.data() }));
+                    newData.sort((a, b) => (a.order || 0) - (b.order || 0));
+                    
+                    // 🚀 性能優化：深度比對，資料若沒變更則「絕對不觸發」重繪 (解決 F5 刷新閃爍)
+                    if (JSON.stringify(dataStore[col]) !== JSON.stringify(newData)) {
+                        dataStore[col] = newData;
+                        localStorage.setItem('lol_cache_dataStore', JSON.stringify(dataStore));
+                        if (activeTab === col) render();
+                    }
                 }, (err) => console.error("Firestore Error:", err));
             });
 
             // 載入操作日誌 (最多顯示最新 50 筆)
             onSnapshot(query(getCol('logs'), orderBy('timestamp', 'desc'), limit(50)), (snapshot) => {
-                logsStore = [];
-                snapshot.forEach(d => logsStore.push({ id: d.id, ...d.data() }));
-                renderLogs();
+                let newLogs = [];
+                snapshot.forEach(d => newLogs.push({ id: d.id, ...d.data() }));
+                
+                // 🚀 性能優化：日誌若沒變更則不觸發重繪
+                if (JSON.stringify(logsStore) !== JSON.stringify(newLogs)) {
+                    logsStore = newLogs;
+                    localStorage.setItem('lol_cache_logsStore', JSON.stringify(logsStore));
+                    renderLogs();
+                }
             }, (err) => console.error("Logs Error:", err));
         });
 
@@ -511,6 +531,7 @@
                 
                 // 動態給予操作者專屬顏色 (套用使用者自訂的顏色)
                 const userColor = log.user === sysUserName ? sysUserColor : '#47daff';
+                const bracketColor = '#FFEB3B'; // 🌟 明顯的亮黃色
 
                 let innerHtml = `
                     <span class="log-time" title="${fullTimeStr}" style="cursor: help;">${timeStr}</span>
@@ -520,13 +541,13 @@
                 if (isSystem) {
                     const displayAction = log.action === '系統' ? '' : log.action;
                     innerHtml += `
-                        <span class="${targetClass}" title="${log.targetName}">${displayAction} <span style="color: #ffbae9;">[</span>${log.targetName}<span style="color: #ffbae9;">]</span></span>
+                        <span class="${targetClass}" title="${log.targetName}">${displayAction} <span style="color: ${bracketColor};">[</span>${log.targetName}<span style="color: ${bracketColor};">]</span></span>
                     `;
                     if (log.detail) innerHtml += `<span class="${targetClass}" style="margin-left:4px;">${log.detail}</span>`;
                 } else {
                     innerHtml += `
                         <span class="${actionClass}">${log.action}</span>
-                        <span class="${targetClass}" title="${log.targetName}"><span style="color: #ffbae9;">[</span>${log.targetName}<span style="color: #ffbae9;">]</span></span>
+                        <span class="${targetClass}" title="${log.targetName}"><span style="color: ${bracketColor};">[</span>${log.targetName}<span style="color: ${bracketColor};">]</span></span>
                     `;
                     if (log.detail) {
                         innerHtml += `<span class="log-detail font-black text-[#47daff] text-[10.5px] pr-2 ml-1 shrink-0">${log.detail}</span>`;
@@ -790,7 +811,10 @@
             document.querySelectorAll('.view-btn').forEach(b => b.classList.toggle('active', b.dataset.view === activeView));
             const searchEl = document.querySelector('.search-box');
             if (searchEl) searchEl.value = searchQuery;
+            
+            // 🚀 啟動時立刻渲染本地快取資料
             render();
+            renderLogs(); 
             
             const displayEl = document.getElementById('displayUserName');
             if(displayEl) {
