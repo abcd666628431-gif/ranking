@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+　<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
@@ -769,7 +769,6 @@
                 const targetClass = isSystem ? 'log-target system' : 'log-target';
                 
                 const userColor = log.user === sysUserName ? sysUserColor : '#47daff';
-                const bracketColor = '#ffbae9'; // 還原為粉紅色
 
                 let innerHtml = `
                     <span class="log-time" title="${fullTimeStr}" style="cursor: help;">${timeStr}</span>
@@ -779,16 +778,16 @@
                 if (isSystem) {
                     const displayAction = log.action === '系統' ? '' : log.action;
                     innerHtml += `
-                        <span class="${targetClass}" title="${log.targetName}">${displayAction} <span style="color: ${bracketColor};">[</span>${log.targetName}<span style="color: ${bracketColor};">]</span></span>
+                        <span class="${targetClass}" title="${log.targetName}">${displayAction} <span style="color: #ffbae9;">[</span>${log.targetName}<span style="color: #ffbae9;">]</span></span>
                     `;
                     if (log.detail) innerHtml += `<span class="${targetClass}" style="margin-left:4px;">${log.detail}</span>`;
                 } else {
                     innerHtml += `
                         <span class="${actionClass}">${log.action}</span>
-                        <span class="${targetClass}" title="${log.targetName}"><span style="color: ${bracketColor};">[</span>${log.targetName}<span style="color: ${bracketColor};">]</span></span>
+                        <span class="${targetClass}" title="${log.targetName}"><span style="color: #ffbae9;">[</span>${log.targetName}<span style="color: #ffbae9;">]</span></span>
                     `;
                     if (log.detail) {
-                        innerHtml += `<span class="log-detail font-black text-[#47daff] pr-2 ml-1 shrink-0">${log.detail}</span>`;
+                        innerHtml += `<span class="log-detail font-black text-[#47daff] text-[10.5px] pr-2 ml-1 shrink-0">${log.detail}</span>`;
                     }
                 }
 
@@ -1290,7 +1289,7 @@
 
         /* 右側操作日誌 Sidebar */
         .log-sidebar {
-            width: 280px;
+            width: 320px;
             background: rgba(0,0,0,0.3);
             border: 1px solid rgba(255,255,255,0.25);
             border-radius: 8px;
@@ -1305,7 +1304,7 @@
     }
     
     .log-header {
-        padding: 6px 8px;
+        padding: 10px 12px;
         font-weight: 900;
         font-size: 0.8rem;
         color: rgba(255,255,255,0.8);
@@ -1315,18 +1314,18 @@
         align-items: center;
         gap: 8px;
         text-transform: uppercase;
-        margin-bottom: 4px;
+        margin-bottom: 8px;
     }
     
     .log-content {
-        padding: 0 6px 6px 6px;
+        padding: 0 10px 10px 10px;
         overflow-y: auto;
         flex: 1;
         display: flex;
         flex-direction: column;
-        gap: 2px; /* 還原間距 */
+        gap: 4px;
         font-family: monospace;
-        font-size: 13px; /* 還原字體大小 */
+        font-size: 13px;
         color: rgba(255,255,255,0.7);
     }
     
@@ -1336,16 +1335,16 @@
         .log-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
         .log-content::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
 
-    .log-entry {
-        display: flex;
-        align-items: center;
-        width: 100%;
-        padding: 2px 0; /* 還原 Padding */
-        border-bottom: 1px solid rgba(255,255,255,0.05);
-        transition: all 0.3s ease;
-    }
-    
-    .log-time { color: rgba(255,255,255,0.3); font-size: 10px; margin-right: 4px; flex-shrink: 0; } /* 還原時間大小為 10px */
+        .log-entry {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            transition: all 0.3s ease;
+        }
+        
+        .log-time { color: rgba(255,255,255,0.3); font-size: 8px; margin-right: 4px; flex-shrink: 0; }
         .log-user { font-weight: bold; font-size: 11.5px; margin-right: 2px; flex-shrink: 0; }
         .log-action { font-size: 10.5px; margin-right: 2px; flex-shrink: 0; opacity: 0.8; }
         .log-action.danger { color: #f87171; font-weight: bold; opacity: 1; }
