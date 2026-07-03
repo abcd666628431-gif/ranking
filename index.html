@@ -44,12 +44,43 @@
 
         const getCol = (col) => collection(db, 'artifacts', appId, 'public', 'data', col);
 
+        let sysUserName = localStorage.getItem('sysUserName') || '管理員';
+
+        window.openUserNameModal = () => {
+            document.getElementById('newUserNameInput').value = sysUserName;
+            document.getElementById('userNameModal').style.display = 'flex';
+        };
+
+        window.closeUserNameModal = () => {
+            document.getElementById('userNameModal').style.display = 'none';
+        };
+
+        window.saveUserName = () => {
+            const newName = document.getElementById('newUserNameInput').value.trim();
+            if (newName) {
+                sysUserName = newName;
+                localStorage.setItem('sysUserName', sysUserName);
+                const displayEl = document.getElementById('displayUserName');
+                if(displayEl) displayEl.innerText = sysUserName;
+            }
+            closeUserNameModal();
+        };
+
+        window.openImageModal = (url) => {
+            document.getElementById('enlargedImage').src = url;
+            document.getElementById('imageModal').style.display = 'flex';
+        };
+
+        window.closeImageModal = () => {
+            document.getElementById('imageModal').style.display = 'none';
+        };
+
         // 寫入操作日誌函式
         window.writeLog = async (action, targetName, detail) => {
             try {
                 await addDoc(getCol('logs'), {
                     timestamp: Date.now(),
-                    user: '管理員',
+                    user: sysUserName,
                     action: action,
                     targetName: targetName || '未知',
                     detail: detail || ''
@@ -101,7 +132,7 @@
         };
 
         function getRankLabelByScore(score, tab) {
-            const labels = tab === 'trash' ? ['畜生', '災難', '危險', '警戒', '異常', '注意'] : ['S+', 'S', 'A', 'B', 'C', 'D'];
+            const labels = tab === 'trash' ? ['畜生級', '災難級', '危險級', '警戒級', '異常級', '注意級'] : ['S+', 'S', 'A', 'B', 'C', 'D'];
             if (score >= 105) return labels[0];
             if (score >= 90) return labels[1];
             if (score >= 75) return labels[2];
@@ -284,6 +315,10 @@
             document.getElementById('dcName2').value = p ? (p.dcName2 || '') : '';
             document.getElementById('note').value = p ? p.note : '';
             
+            const d = new Date();
+            const todayStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+            document.getElementById('createDate').value = p && p.createDate ? p.createDate : todayStr;
+            
             const savedImgUrl = p ? (p.imgUrl || '') : '';
             document.getElementById('imgUrl').value = savedImgUrl;
             window.updateImagePreview(savedImgUrl); 
@@ -335,6 +370,9 @@
             else if (scoreSelect === 'C') scoreNum = 50;
             else if (scoreSelect === 'D') scoreNum = 35;
 
+            const d = new Date();
+            const todayStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
             const data = {
                 name: playerName,
                 nickName: document.getElementById('nickName').value || '',
@@ -343,7 +381,8 @@
                 score: scoreNum,
                 pos: selectedPos,
                 note: document.getElementById('note').value,
-                imgUrl: document.getElementById('imgUrl').value || ''
+                imgUrl: document.getElementById('imgUrl').value || '',
+                createDate: document.getElementById('createDate').value || todayStr
             };
             closeModal();
             if (id) {
@@ -452,12 +491,12 @@
                 : ['S+', 'S', 'A', 'B', 'C', 'D'];
             const rankTitle = isTrash ? '雷人指數' : '實力分級';
 
-            document.querySelector('.tier-t0').innerText = tierLabels[0].replace('級', '');
-            document.querySelector('.tier-t1').innerText = tierLabels[1].replace('級', '');
-            document.querySelector('.tier-t2').innerText = tierLabels[2].replace('級', '');
-            document.querySelector('.tier-t3').innerText = tierLabels[3].replace('級', '');
-            document.querySelector('.tier-t4').innerText = tierLabels[4].replace('級', '');
-            document.querySelector('.tier-t5').innerText = tierLabels[5].replace('級', '');
+            document.querySelector('.tier-t0').innerText = tierLabels[0];
+            document.querySelector('.tier-t1').innerText = tierLabels[1];
+            document.querySelector('.tier-t2').innerText = tierLabels[2];
+            document.querySelector('.tier-t3').innerText = tierLabels[3];
+            document.querySelector('.tier-t4').innerText = tierLabels[4];
+            document.querySelector('.tier-t5').innerText = tierLabels[5];
 
             const scoreSelect = document.getElementById('score');
             if(scoreSelect) {
@@ -535,6 +574,8 @@
                                     <div class="tooltip-value">${p.dcName || '-'}${p.dcName2 ? `<br>${p.dcName2}` : ''}</div>
                                     <div class="tooltip-label">${rankTitle}</div>
                                     <div class="tooltip-value">${displayRank}</div>
+                                    <div class="tooltip-label">建立日期</div>
+                                    <div class="tooltip-value">${p.createDate || '-'}</div>
                                     <div class="tooltip-label">位置</div>
                                     <div class="tooltip-value">
                                         ${posHtml}
@@ -543,7 +584,7 @@
                                 <div class="tooltip-line" style="border-top: 1px dashed #2d455c; margin-top: 6px; padding-top: 4px; white-space: normal;">
                                     備註: <span>${p.note || '-'}</span>
                                 </div>
-                                ${p.imgUrl ? `<div style="margin-top:6px; text-align:center;"><img src="${p.imgUrl}" style="max-width:100%; border-radius:4px; max-height:200px; object-fit:contain;"></div>` : ''}
+                                ${p.imgUrl ? `<div style="margin-top:6px; text-align:center;"><img src="${p.imgUrl}" onclick="openImageModal('${p.imgUrl}')" style="max-width:100%; border-radius:4px; max-height:200px; object-fit:contain; cursor:zoom-in;"></div>` : ''}
                             </div>
                         </div>
                     `;
@@ -602,7 +643,7 @@
                                 </div>
                                 <div class="card-footer">DC: ${dcMerged} | ${p.note || '-'}</div>
                             </div>
-                            ${p.imgUrl ? `<div class="card-img" style="margin-right:8px;"><img src="${p.imgUrl}" style="max-height:30px; border-radius:4px;"></div>` : ''}
+                            ${p.imgUrl ? `<div class="card-img" style="margin-right:8px;"><img src="${p.imgUrl}" onclick="openImageModal('${p.imgUrl}')" style="max-height:30px; border-radius:4px; cursor:zoom-in;"></div>` : ''}
                             <div class="card-actions">
                                 <span class="drag-handle" title="拖曳">⠿</span>
                                 <span class="menu-dots" onclick="openModal('${p.id}')" title="編輯">⋮</span>
@@ -617,6 +658,8 @@
                                     <div class="tooltip-value">${p.dcName || '-'}${p.dcName2 ? `<br>${p.dcName2}` : ''}</div>
                                     <div class="tooltip-label">${rankTitle}</div>
                                     <div class="tooltip-value">${displayRank}</div>
+                                    <div class="tooltip-label">建立日期</div>
+                                    <div class="tooltip-value">${p.createDate || '-'}</div>
                                     <div class="tooltip-label">位置</div>
                                     <div class="tooltip-value">
                                         ${posHtml}
@@ -625,7 +668,7 @@
                                 <div class="tooltip-line" style="border-top: 1px dashed #2d455c; margin-top: 6px; padding-top: 4px; white-space: normal;">
                                     備註: <span>${p.note || '-'}</span>
                                 </div>
-                                ${p.imgUrl ? `<div style="margin-top:6px; text-align:center;"><img src="${p.imgUrl}" style="max-width:100%; border-radius:4px; max-height:200px; object-fit:contain;"></div>` : ''}
+                                ${p.imgUrl ? `<div style="margin-top:6px; text-align:center;"><img src="${p.imgUrl}" onclick="openImageModal('${p.imgUrl}')" style="max-width:100%; border-radius:4px; max-height:200px; object-fit:contain; cursor:zoom-in;"></div>` : ''}
                             </div>
                         </div>
                     `;
@@ -645,6 +688,11 @@
         } else {
             signInAnonymously(auth);
         }
+
+        setTimeout(() => {
+            const displayEl = document.getElementById('displayUserName');
+            if(displayEl) displayEl.innerText = sysUserName;
+        }, 100);
     </script>
     <style>
         :root { --bg-color: #0a1219; --card-bg: #111e2a; --text-color: #e6edf3; --accent: #61dafb; --input-bg: #182633; }
@@ -1059,9 +1107,15 @@
         
         <!-- 操作日誌側邊欄 -->
         <div class="log-sidebar">
-            <div class="log-header">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                操作日誌
+            <div class="log-header" style="display: flex; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    操作日誌
+                </div>
+                <div style="font-size: 0.8rem; color: #8892b0; cursor: pointer; display: flex; align-items: center; gap: 4px; background: #162431; padding: 4px 8px; border-radius: 6px; border: 1px solid #2d455c; transition: all 0.2s;" onclick="openUserNameModal()" onmouseover="this.style.color='#fff'; this.style.borderColor='var(--accent)'" onmouseout="this.style.color='#8892b0'; this.style.borderColor='#2d455c'">
+                    <span id="displayUserName">管理員</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                </div>
             </div>
             <div class="log-content" id="logContent">
                 <!-- 日誌項目將在此動態載入 -->
@@ -1092,6 +1146,7 @@
             <input type="hidden" id="editId">
             <div class="form-group"><label>遊戲 ID</label><input type="text" id="name"></div>
             <div class="form-group"><label>暱稱(顯示名)</label><input type="text" id="nickName" placeholder="卡片顯示的自訂名稱"></div>
+            <div class="form-group"><label>建立日期</label><input type="date" id="createDate"></div>
             <div class="form-group">
                 <label>DC 名稱</label>
                 <input type="text" id="dcName" style="margin-bottom: 8px;" placeholder="主要 DC 帳號">
@@ -1137,6 +1192,27 @@
                     <button onclick="savePlayer()" style="padding:10px 20px; background:var(--accent); border:none; border-radius:6px; color:#000; font-weight:bold; cursor:pointer;">儲存</button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- 使用者名稱設定 Modal -->
+    <div class="modal" id="userNameModal" style="z-index: 3000;">
+        <div class="modal-content" style="text-align: center; width: 90%; max-width: 320px;">
+            <h2 style="margin-top:0; color:#fff;">修改操作者名稱</h2>
+            <div class="form-group">
+                <input type="text" id="newUserNameInput" placeholder="輸入您的名稱..." style="text-align: center; font-size: 1.1rem; padding: 12px;">
+            </div>
+            <div style="display:flex; justify-content:center; gap:10px; margin-top: 20px;">
+                <button onclick="closeUserNameModal()" style="padding:10px 20px; background:#2d455c; border:none; border-radius:6px; color:#fff; cursor:pointer;">取消</button>
+                <button onclick="saveUserName()" style="padding:10px 20px; background:var(--accent); border:none; border-radius:6px; color:#000; font-weight:bold; cursor:pointer;">儲存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 圖片放大預覽 Modal -->
+    <div class="modal" id="imageModal" onclick="closeImageModal()" style="z-index: 4000; cursor: zoom-out;">
+        <div style="max-width: 90%; max-height: 90%; display: flex; justify-content: center; align-items: center;">
+            <img id="enlargedImage" src="" style="max-width: 100%; max-height: 90vh; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); object-fit: contain;">
         </div>
     </div>
 </body>
