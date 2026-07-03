@@ -30,9 +30,12 @@
         const auth = getAuth(app);
 
         const POS_COLORS = { MID: '#ff4d4f', TOP: '#9747FF', AD: '#F59E0B', JG: '#10B981', SUP: '#EC4899' };
-        let activeTab = 'players'; 
-        let searchQuery = '';
-        let activeView = 'tier'; 
+        
+        // 優化：加入本地記憶，載入上次瀏覽的設定
+        let activeTab = localStorage.getItem('lol_activeTab') || 'players'; 
+        let searchQuery = localStorage.getItem('lol_searchQuery') || '';
+        let activeView = localStorage.getItem('lol_activeView') || 'tier'; 
+        
         let dataStore = { players: [], trash: [] };
         let logsStore = []; // 存放日誌資料
         let selectedPos = []; 
@@ -226,7 +229,8 @@
                     dataStore[col] = [];
                     snapshot.forEach(d => dataStore[col].push({ id: d.id, ...d.data() }));
                     dataStore[col].sort((a, b) => (a.order || 0) - (b.order || 0));
-                    render();
+                    // 性能優化：只在資料變動屬於當前頁籤時，才觸發重繪
+                    if (activeTab === col) render();
                 }, (err) => console.error("Firestore Error:", err));
             });
 
@@ -249,10 +253,20 @@
             if (sortableListInstance) sortableListInstance.option("disabled", !isEditMode);
         };
 
-        window.updateSearch = (val) => { searchQuery = val.toLowerCase(); render(); };
+        // 性能優化：搜尋防抖 (Debounce)，防止輸入過快導致瘋狂重繪
+        let searchTimeout;
+        window.updateSearch = (val) => { 
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                searchQuery = val.toLowerCase(); 
+                localStorage.setItem('lol_searchQuery', searchQuery);
+                render(); 
+            }, 250); 
+        };
         
         window.switchTab = (tab) => {
             activeTab = tab;
+            localStorage.setItem('lol_activeTab', tab);
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
             render();
         };
@@ -299,6 +313,7 @@
 
         window.switchView = (view) => {
             activeView = view;
+            localStorage.setItem('lol_activeView', view);
             document.querySelectorAll('.view-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
             render();
         };
@@ -449,19 +464,26 @@
             const numCol = document.getElementById('numberColumn');
             if (!numCol) return;
             numCol.innerHTML = '';
+            
+            // 性能優化：使用 DocumentFragment 一次性渲染序號
+            const frag = document.createDocumentFragment();
             rows.forEach((row, i) => {
                 const numDiv = document.createElement('div');
                 numDiv.className = 'static-rank-num';
                 numDiv.innerText = i + 1;
                 numDiv.style.height = row.offsetHeight + 'px';
-                numCol.appendChild(numDiv);
+                frag.appendChild(numDiv);
             });
+            numCol.appendChild(frag);
         }
         
         function renderLogs() {
             const logContent = document.getElementById('logContent');
             if (!logContent) return;
             logContent.innerHTML = '';
+            
+            // 性能優化：使用 DocumentFragment 一次性渲染日誌列表
+            const logFrag = document.createDocumentFragment();
             
             logsStore.forEach(log => {
                 const timeStr = new Date(log.timestamp).toLocaleTimeString('en-US', {hour12: false, hour: '2-digit', minute:'2-digit'});
@@ -503,13 +525,15 @@
                         <span class="${targetClass}" title="${log.targetName}">[${log.targetName}]</span>
                     `;
                     if (log.detail) {
-                        innerHtml += `<span class="log-detail">${log.detail}</span>`;
+                        innerHtml += `<span class="log-detail font-black text-[#47daff] text-[10.5px] pr-2 ml-1 shrink-0">${log.detail}</span>`;
                     }
                 }
 
                 el.innerHTML = innerHtml;
-                logContent.appendChild(el);
+                logFrag.appendChild(el);
             });
+            
+            logContent.appendChild(logFrag);
         }
 
         function render() {
@@ -569,11 +593,19 @@
                 const t5Container = document.getElementById('tier-T5');
 
                 if (t0Container) t0Container.innerHTML = '';
-                t1Container.innerHTML = '';
-                t2Container.innerHTML = '';
-                t3Container.innerHTML = '';
-                t4Container.innerHTML = '';
-                t5Container.innerHTML = '';
+                if (t1Container) t1Container.innerHTML = '';
+                if (t2Container) t2Container.innerHTML = '';
+                if (t3Container) t3Container.innerHTML = '';
+                if (t4Container) t4Container.innerHTML = '';
+                if (t5Container) t5Container.innerHTML = '';
+
+                // 性能優化：建立虛擬的 DOM 碎片，避免迴圈內不斷重繪觸發卡頓
+                const fragT0 = document.createDocumentFragment();
+                const fragT1 = document.createDocumentFragment();
+                const fragT2 = document.createDocumentFragment();
+                const fragT3 = document.createDocumentFragment();
+                const fragT4 = document.createDocumentFragment();
+                const fragT5 = document.createDocumentFragment();
 
                 filtered.forEach((p) => {
                     const row = document.createElement('div');
@@ -635,19 +667,27 @@
                     `;
                     
                     if (score >= 105) {
-                        if (t0Container) t0Container.appendChild(row);
+                        if (t0Container) fragT0.appendChild(row);
                     } else if (score >= 90) {
-                        t1Container.appendChild(row);
+                        fragT1.appendChild(row);
                     } else if (score >= 75) {
-                        t2Container.appendChild(row);
+                        fragT2.appendChild(row);
                     } else if (score >= 60) {
-                        t3Container.appendChild(row);
+                        fragT3.appendChild(row);
                     } else if (score >= 45) {
-                        t4Container.appendChild(row);
+                        fragT4.appendChild(row);
                     } else {
-                        t5Container.appendChild(row);
+                        fragT5.appendChild(row);
                     }
                 });
+                
+                // 一次性寫入 DOM
+                if (t0Container) t0Container.appendChild(fragT0);
+                if (t1Container) t1Container.appendChild(fragT1);
+                if (t2Container) t2Container.appendChild(fragT2);
+                if (t3Container) t3Container.appendChild(fragT3);
+                if (t4Container) t4Container.appendChild(fragT4);
+                if (t5Container) t5Container.appendChild(fragT5);
                 
                 initSortable();
             } else {
@@ -656,6 +696,9 @@
 
                 const list = document.getElementById('playerList');
                 list.innerHTML = '';
+                
+                // 性能優化：列表模式同樣使用 DocumentFragment
+                const listFrag = document.createDocumentFragment();
 
                 filtered.forEach((p) => {
                     const row = document.createElement('div');
@@ -717,8 +760,11 @@
                             </div>
                         </div>
                     `;
-                    list.appendChild(row);
+                    listFrag.appendChild(row);
                 });
+                
+                // 一次性寫入 DOM
+                list.appendChild(listFrag);
 
                 requestAnimationFrame(() => syncNumberHeights());
                 initSortableList();
@@ -735,6 +781,13 @@
         }
 
         setTimeout(() => {
+            // 初始化還原本機 UI 狀態設定
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === activeTab));
+            document.querySelectorAll('.view-btn').forEach(b => b.classList.toggle('active', b.dataset.view === activeView));
+            const searchEl = document.querySelector('.search-box');
+            if (searchEl) searchEl.value = searchQuery;
+            render();
+            
             const displayEl = document.getElementById('displayUserName');
             if(displayEl) {
                 displayEl.innerText = sysUserName;
