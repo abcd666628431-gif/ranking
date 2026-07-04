@@ -1010,7 +1010,7 @@
                                     <div class="pos-col">
                                         ${posHtml}
                                     </div>
-                                    <span class="player-name" style="font-size: 0.85rem; margin-left: var(--sys-name-gap);">${p.nickName || '-'}</span>
+                                    <span class="player-name" style="font-size: 0.85rem;">${p.nickName || '-'}</span>
                                 </div>
                             </div>
                             <div class="card-actions">
@@ -1105,7 +1105,7 @@
                                     <div class="pos-col">
                                         ${posHtml}
                                     </div>
-                                    <span class="player-name" style="margin-left: var(--sys-name-gap);">${displayNameCombined} ${activeTab === 'players' ? `(${rankLabel})` : ''}</span>
+                                    <span class="player-name">${displayNameCombined} ${activeTab === 'players' ? `(${rankLabel})` : ''}</span>
                                 </div>
                                 <div class="card-footer">DC: ${dcMerged} | ${p.note || '-'}</div>
                             </div>
@@ -1258,9 +1258,10 @@
         .static-rank-num { display: flex; align-items: center; justify-content: center; font-weight: 900; font-family: monospace, sans-serif; color: var(--accent); font-size: 1.2rem; margin-bottom: 12px; user-select: none; -webkit-user-select: none; }
 
         .tier-list-container { display: flex; flex-direction: column; gap: 6px; width: 100%; }
-        .tier-row { display: flex; background: #0f1c2c; border: var(--sys-border-w) solid rgba(255,255,255,0.25); border-radius: calc(var(--sys-radius) + 4px); min-height: 76px; position: relative; box-shadow: 0 4px 20px rgba(0,0,0,0.4); overflow: hidden; }
-        .tier-header { width: 110px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; text-align: center; font-weight: 900; font-family: monospace, sans-serif; font-size: 1.3rem; color: #000; padding: 8px; box-sizing: border-box; line-height: 1.3; letter-spacing: 1px; }
-        .tier-content { flex: 1; display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; min-height: 60px; background: #111e2a; align-items: center; }
+        .tier-row { display: flex; background: #0f1c2c; border: var(--sys-border-w) solid rgba(255,255,255,0.25); border-radius: calc(var(--sys-radius) + 4px); min-height: 76px; position: relative; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+        .tier-row:hover { z-index: 10; }
+        .tier-header { width: 110px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; text-align: center; font-weight: 900; font-family: monospace, sans-serif; font-size: 1.3rem; color: #000; padding: 8px; box-sizing: border-box; line-height: 1.3; letter-spacing: 1px; border-top-left-radius: calc(var(--sys-radius) + 3px); border-bottom-left-radius: calc(var(--sys-radius) + 3px); }
+        .tier-content { flex: 1; display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; min-height: 60px; background: #111e2a; align-items: center; border-top-right-radius: calc(var(--sys-radius) + 3px); border-bottom-right-radius: calc(var(--sys-radius) + 3px); }
 
         .tier-t0 { background-color: #ff4d4f; }
         .tier-t1 { background-color: #ff7f7f; }
@@ -1285,6 +1286,7 @@
             gap: 4px; 
             position: relative; 
         }
+        .player-card:hover { z-index: 100; }
         
         .card-content { 
             display: flex; 
@@ -1297,7 +1299,7 @@
             -webkit-user-select: none; 
         }
         
-        .card-header { display: flex; align-items: center; gap: 6px; white-space: nowrap; font-family: monospace, sans-serif; }
+        .card-header { display: flex; align-items: center; gap: var(--sys-name-gap); white-space: nowrap; font-family: monospace, sans-serif; }
         .pos-col { display: flex; flex-direction: column; gap: 2px; align-items: center; justify-content: center; }
         .pos-badge { padding: 1px 4px; border-radius: 10px; color: #fff; font-size: 0.55rem; font-weight: 900; min-width: 26px; text-align: center; box-sizing: border-box; line-height: 1.2; letter-spacing: 0.5px; font-family: monospace, sans-serif; }
         .player-name { font-weight: 900; font-family: monospace, sans-serif; font-size: 0.85rem; white-space: nowrap; letter-spacing: 0.5px; }
