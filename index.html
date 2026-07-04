@@ -57,8 +57,12 @@
         let sysUserColor = localStorage.getItem('sysUserColor') || '#ffbae9';
 
         // 版面動態設定初始化
-        const defaultLayoutUI = { gapMain: 12, radius: 8, cardPx: 8, cardPy: 6, logWidth: 320, borderW: 1, tierBorderW: 1, cardBorderW: 1, logHeight: 80, nameGap: 4 };
+        const defaultLayoutUI = { gapMain: 12, radius: 8, cardPx: 8, cardPy: 6, logWidth: 320, borderW: 1, tierBorderW: 1, cardBorderW: 1, logHeight: 600, nameGap: 4 };
         let currentLayoutUI = JSON.parse(localStorage.getItem('sysLayoutUI')) || {...defaultLayoutUI};
+        
+        // 舊資料相容：如果 logHeight 小於等於 100 (代表是舊版的 vh 單位)，自動轉換為預設 600px
+        if (currentLayoutUI.logHeight <= 100) currentLayoutUI.logHeight = 600;
+
         function applyLayoutUI(layout) {
             const root = document.documentElement;
             root.style.setProperty('--sys-gap-main', layout.gapMain + 'px');
@@ -70,7 +74,7 @@
             // 相容舊資料，若無細分屬性則預設使用一般邊框寬度
             root.style.setProperty('--sys-tier-border-w', (layout.tierBorderW !== undefined ? layout.tierBorderW : layout.borderW) + 'px');
             root.style.setProperty('--sys-card-border-w', (layout.cardBorderW !== undefined ? layout.cardBorderW : layout.borderW) + 'px');
-            root.style.setProperty('--sys-log-h', layout.logHeight + 'vh');
+            root.style.setProperty('--sys-log-h', layout.logHeight + 'px');
             root.style.setProperty('--sys-name-gap', layout.nameGap + 'px');
         }
         applyLayoutUI(currentLayoutUI);
@@ -162,7 +166,7 @@
             document.getElementById('valBorderW').innerText = document.getElementById('setBorderW').value + 'px';
             document.getElementById('valTierBorderW').innerText = document.getElementById('setTierBorderW').value + 'px';
             document.getElementById('valCardBorderW').innerText = document.getElementById('setCardBorderW').value + 'px';
-            document.getElementById('valLogHeight').innerText = document.getElementById('setLogHeight').value + 'vh';
+            document.getElementById('valLogHeight').innerText = document.getElementById('setLogHeight').value + 'px';
             document.getElementById('valNameGap').innerText = document.getElementById('setNameGap').value + 'px';
         }
 
@@ -234,6 +238,7 @@
             const displayEl = document.getElementById('displayUserName');
             const roleBadge = document.getElementById('userRoleBadge');
             const adminBtn = document.getElementById('adminPanelBtn');
+            const logLockOverlay = document.getElementById('logLockOverlay');
             
             if(displayEl) {
                 displayEl.innerText = sysUserName;
@@ -256,6 +261,11 @@
             // 只有管理員能看到管理按鈕
             if(adminBtn) {
                 adminBtn.style.display = currentUserRole === 'admin' ? 'flex' : 'none';
+            }
+
+            // 訪客日誌遮罩
+            if(logLockOverlay) {
+                logLockOverlay.style.display = currentUserRole === 'guest' ? 'flex' : 'none';
             }
         }
 
@@ -596,6 +606,10 @@
             onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'layout'), (snapshot) => {
                 if (snapshot.exists()) {
                     const globalLayout = snapshot.data();
+                    
+                    // 舊資料相容：防呆處理
+                    if (globalLayout.logHeight <= 100) globalLayout.logHeight = 600; 
+
                     // 檢查是否與當前版面不同，不同才觸發重繪 (避免自身儲存時的重複渲染)
                     if (JSON.stringify(currentLayoutUI) !== JSON.stringify(globalLayout)) {
                         currentLayoutUI = { ...defaultLayoutUI, ...globalLayout };
@@ -1204,7 +1218,7 @@
             /* 動態版面設定變數 */
             --sys-gap-main: 12px;
             --sys-log-w: 320px;
-            --sys-log-h: 80vh;
+            --sys-log-h: 600px;
             --sys-radius: 8px;
             --sys-border-w: 1px;
             --sys-tier-border-w: 1px;
@@ -1261,7 +1275,7 @@
 
         .list-container { width: 100%; position: relative; min-height: 400px; border-radius: 12px; }
         
-        .lock-overlay { position: absolute; inset: 0; z-index: 90; display: none; justify-content: center; align-items: center; background: rgba(10,18,25,0.2); backdrop-filter: blur(10px); border-radius: 12px; flex-direction: column; gap: 15px; }
+        .lock-overlay { position: absolute; inset: 0; z-index: 90; display: none; justify-content: center; align-items: center; background: rgba(10,18,25,0.1); backdrop-filter: blur(10px); border-radius: 12px; flex-direction: column; gap: 15px; }
         .lock-icon { font-size: 3rem; }
         .unlock-btn { padding: 12px 24px; background: var(--accent); color: #0a1219; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
 
@@ -1684,8 +1698,15 @@
                     </div>
                 </div>
             </div>
-            <div class="log-content" id="logContent">
-                <!-- 日誌項目將在此動態載入 -->
+            <div style="position: relative; flex: 1; display: flex; flex-direction: column; min-height: 0;">
+                <div class="log-content" id="logContent">
+                    <!-- 日誌項目將在此動態載入 -->
+                </div>
+                <div id="logLockOverlay" class="lock-overlay" style="border-radius: 0;">
+                    <div class="lock-icon" style="font-size: 2rem;">🔒</div>
+                    <p style="font-weight:bold; margin:0; color:#fff; font-size: 0.9rem;">日誌已隱藏</p>
+                    <p style="font-size:0.75rem; color:#8892b0; margin:0; margin-top:-10px;">會員專屬</p>
+                </div>
             </div>
         </div>
     </div>
@@ -1853,9 +1874,9 @@
 
                 <div class="ui-slider-group">
                     <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                        <label>日誌側邊欄高度 (vh)</label><span id="valLogHeight" class="val-badge">80vh</span>
+                        <label>日誌側邊欄高度 (px)</label><span id="valLogHeight" class="val-badge">600px</span>
                     </div>
-                    <input type="range" id="setLogHeight" min="30" max="100" value="80" oninput="previewUISettings()">
+                    <input type="range" id="setLogHeight" min="200" max="1200" value="600" oninput="previewUISettings()">
                 </div>
                 
                 <div class="ui-slider-group">
