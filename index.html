@@ -57,7 +57,7 @@
         let sysUserColor = localStorage.getItem('sysUserColor') || '#ffbae9';
 
         // 版面動態設定初始化
-        const defaultLayoutUI = { gapMain: 12, radius: 8, cardPx: 8, cardPy: 6, logWidth: 320, borderW: 1, logHeight: 80, nameGap: 4 };
+        const defaultLayoutUI = { gapMain: 12, radius: 8, cardPx: 8, cardPy: 6, logWidth: 320, borderW: 1, tierBorderW: 1, cardBorderW: 1, logHeight: 80, nameGap: 4 };
         let currentLayoutUI = JSON.parse(localStorage.getItem('sysLayoutUI')) || {...defaultLayoutUI};
         function applyLayoutUI(layout) {
             const root = document.documentElement;
@@ -67,6 +67,9 @@
             root.style.setProperty('--sys-card-py', layout.cardPy + 'px');
             root.style.setProperty('--sys-log-w', layout.logWidth + 'px');
             root.style.setProperty('--sys-border-w', layout.borderW + 'px');
+            // 相容舊資料，若無細分屬性則預設使用一般邊框寬度
+            root.style.setProperty('--sys-tier-border-w', (layout.tierBorderW !== undefined ? layout.tierBorderW : layout.borderW) + 'px');
+            root.style.setProperty('--sys-card-border-w', (layout.cardBorderW !== undefined ? layout.cardBorderW : layout.borderW) + 'px');
             root.style.setProperty('--sys-log-h', layout.logHeight + 'vh');
             root.style.setProperty('--sys-name-gap', layout.nameGap + 'px');
         }
@@ -79,6 +82,8 @@
             document.getElementById('setCardPy').value = currentLayoutUI.cardPy;
             document.getElementById('setLogWidth').value = currentLayoutUI.logWidth;
             document.getElementById('setBorderW').value = currentLayoutUI.borderW;
+            document.getElementById('setTierBorderW').value = currentLayoutUI.tierBorderW !== undefined ? currentLayoutUI.tierBorderW : currentLayoutUI.borderW;
+            document.getElementById('setCardBorderW').value = currentLayoutUI.cardBorderW !== undefined ? currentLayoutUI.cardBorderW : currentLayoutUI.borderW;
             document.getElementById('setLogHeight').value = currentLayoutUI.logHeight;
             document.getElementById('setNameGap').value = currentLayoutUI.nameGap;
             updateUIPreviewLabels();
@@ -98,6 +103,8 @@
                 cardPy: parseInt(document.getElementById('setCardPy').value),
                 logWidth: parseInt(document.getElementById('setLogWidth').value),
                 borderW: parseInt(document.getElementById('setBorderW').value),
+                tierBorderW: parseInt(document.getElementById('setTierBorderW').value),
+                cardBorderW: parseInt(document.getElementById('setCardBorderW').value),
                 logHeight: parseInt(document.getElementById('setLogHeight').value),
                 nameGap: parseInt(document.getElementById('setNameGap').value)
             };
@@ -137,6 +144,8 @@
                 cardPy: parseInt(document.getElementById('setCardPy').value),
                 logWidth: parseInt(document.getElementById('setLogWidth').value),
                 borderW: parseInt(document.getElementById('setBorderW').value),
+                tierBorderW: parseInt(document.getElementById('setTierBorderW').value),
+                cardBorderW: parseInt(document.getElementById('setCardBorderW').value),
                 logHeight: parseInt(document.getElementById('setLogHeight').value),
                 nameGap: parseInt(document.getElementById('setNameGap').value)
             };
@@ -151,6 +160,8 @@
             document.getElementById('valCardPy').innerText = document.getElementById('setCardPy').value + 'px';
             document.getElementById('valLogWidth').innerText = document.getElementById('setLogWidth').value + 'px';
             document.getElementById('valBorderW').innerText = document.getElementById('setBorderW').value + 'px';
+            document.getElementById('valTierBorderW').innerText = document.getElementById('setTierBorderW').value + 'px';
+            document.getElementById('valCardBorderW').innerText = document.getElementById('setCardBorderW').value + 'px';
             document.getElementById('valLogHeight').innerText = document.getElementById('setLogHeight').value + 'vh';
             document.getElementById('valNameGap').innerText = document.getElementById('setNameGap').value + 'px';
         }
@@ -1196,6 +1207,8 @@
             --sys-log-h: 80vh;
             --sys-radius: 8px;
             --sys-border-w: 1px;
+            --sys-tier-border-w: 1px;
+            --sys-card-border-w: 1px;
             --sys-card-px: 8px;
             --sys-card-py: 6px;
             --sys-name-gap: 4px;
@@ -1258,7 +1271,7 @@
         .static-rank-num { display: flex; align-items: center; justify-content: center; font-weight: 900; font-family: monospace, sans-serif; color: var(--accent); font-size: 1.2rem; margin-bottom: 12px; user-select: none; -webkit-user-select: none; }
 
         .tier-list-container { display: flex; flex-direction: column; gap: 6px; width: 100%; }
-        .tier-row { display: flex; background: #0f1c2c; border: var(--sys-border-w) solid rgba(255,255,255,0.25); border-radius: calc(var(--sys-radius) + 4px); min-height: 76px; position: relative; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+        .tier-row { display: flex; background: #0f1c2c; border: var(--sys-tier-border-w) solid rgba(255,255,255,0.25); border-radius: calc(var(--sys-radius) + 4px); min-height: 76px; position: relative; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
         .tier-row:hover { z-index: 10; }
         .tier-header { width: 110px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; text-align: center; font-weight: 900; font-family: monospace, sans-serif; font-size: 1.3rem; color: #000; padding: 8px; box-sizing: border-box; line-height: 1.3; letter-spacing: 1px; border-top-left-radius: calc(var(--sys-radius) + 3px); border-bottom-left-radius: calc(var(--sys-radius) + 3px); }
         .tier-content { flex: 1; display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; min-height: 60px; background: #111e2a; align-items: center; border-top-right-radius: calc(var(--sys-radius) + 3px); border-bottom-right-radius: calc(var(--sys-radius) + 3px); }
@@ -1282,7 +1295,7 @@
             border-radius: var(--sys-radius); 
             display: flex; 
             align-items: center; 
-            border: var(--sys-border-w) solid #2d455c; 
+            border: var(--sys-card-border-w) solid #2d455c; 
             gap: 4px; 
             position: relative; 
         }
@@ -1860,11 +1873,25 @@
                     <input type="range" id="setRadius" min="0" max="24" value="8" oninput="previewUISettings()">
                 </div>
 
-                <div class="ui-slider-group">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                        <label>全域邊框粗細 (Border Width)</label><span id="valBorderW" class="val-badge">1px</span>
+                <div style="display:flex; gap:15px; flex-wrap: wrap;">
+                    <div class="ui-slider-group" style="flex:1; min-width: 120px;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                            <label>一般邊框粗細</label><span id="valBorderW" class="val-badge">1px</span>
+                        </div>
+                        <input type="range" id="setBorderW" min="0" max="5" value="1" oninput="previewUISettings()">
                     </div>
-                    <input type="range" id="setBorderW" min="0" max="5" value="1" oninput="previewUISettings()">
+                    <div class="ui-slider-group" style="flex:1; min-width: 120px;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                            <label>分級列邊框</label><span id="valTierBorderW" class="val-badge">1px</span>
+                        </div>
+                        <input type="range" id="setTierBorderW" min="0" max="5" value="1" oninput="previewUISettings()">
+                    </div>
+                    <div class="ui-slider-group" style="flex:1; min-width: 120px;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                            <label>卡片邊框</label><span id="valCardBorderW" class="val-badge">1px</span>
+                        </div>
+                        <input type="range" id="setCardBorderW" min="0" max="5" value="1" oninput="previewUISettings()">
+                    </div>
                 </div>
 
                 <div style="display:flex; gap:15px;">
