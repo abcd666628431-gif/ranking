@@ -90,7 +90,7 @@
             document.getElementById('uiSettingsModal').style.display = 'none';
         };
 
-        window.saveUISettings = () => {
+        window.saveUISettings = async () => {
             currentLayoutUI = {
                 gapMain: parseInt(document.getElementById('setGapMain').value),
                 radius: parseInt(document.getElementById('setRadius').value),
@@ -101,16 +101,32 @@
                 logHeight: parseInt(document.getElementById('setLogHeight').value),
                 nameGap: parseInt(document.getElementById('setNameGap').value)
             };
-            localStorage.setItem('sysLayoutUI', JSON.stringify(currentLayoutUI));
+            localStorage.setItem('sysLayoutUI', JSON.stringify(currentLayoutUI)); // 保留作為防閃爍快取
             applyLayoutUI(currentLayoutUI);
             document.getElementById('uiSettingsModal').style.display = 'none';
+
+            // 寫入 Firebase 進行全域強制同步
+            if (currentUserRole === 'admin') {
+                try {
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'layout'), currentLayoutUI);
+                    writeLog('系統', '版面微調', '全域同步了新的介面外觀');
+                } catch(e) { console.error('Sync layout error:', e); }
+            }
         };
 
-        window.resetUISettings = () => {
+        window.resetUISettings = async () => {
             currentLayoutUI = {...defaultLayoutUI};
             localStorage.setItem('sysLayoutUI', JSON.stringify(currentLayoutUI));
             applyLayoutUI(currentLayoutUI);
             openUISettings(); 
+
+            // 寫入 Firebase 進行全域還原
+            if (currentUserRole === 'admin') {
+                try {
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'layout'), currentLayoutUI);
+                    writeLog('系統', '版面微調', '已將全域介面還原為預設值');
+                } catch(e) { console.error('Reset layout error:', e); }
+            }
         };
 
         window.previewUISettings = () => {
@@ -564,6 +580,19 @@
                 visitorsStore = newVisitors;
                 if (document.getElementById('adminModal').style.display === 'flex') renderAdminPanel();
             }, (err) => console.error("Visitors Error:", err));
+
+            // 監聽全域版面設定同步 (Settings)
+            onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'layout'), (snapshot) => {
+                if (snapshot.exists()) {
+                    const globalLayout = snapshot.data();
+                    // 檢查是否與當前版面不同，不同才觸發重繪 (避免自身儲存時的重複渲染)
+                    if (JSON.stringify(currentLayoutUI) !== JSON.stringify(globalLayout)) {
+                        currentLayoutUI = { ...defaultLayoutUI, ...globalLayout };
+                        localStorage.setItem('sysLayoutUI', JSON.stringify(currentLayoutUI)); // 更新本地快取
+                        applyLayoutUI(currentLayoutUI);
+                    }
+                }
+            }, (err) => console.error("Layout Sync Error:", err));
         });
 
         // 攔截：強制只有會員與管理員可切換編輯模式
