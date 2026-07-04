@@ -57,7 +57,7 @@
         let sysUserColor = localStorage.getItem('sysUserColor') || '#ffbae9';
 
         // 版面動態設定初始化
-        const defaultLayoutUI = { gapMain: 12, radius: 8, cardPx: 8, cardPy: 6, logWidth: 320, borderW: 1 };
+        const defaultLayoutUI = { gapMain: 12, radius: 8, cardPx: 8, cardPy: 6, logWidth: 320, borderW: 1, logHeight: 80, nameGap: 4 };
         let currentLayoutUI = JSON.parse(localStorage.getItem('sysLayoutUI')) || {...defaultLayoutUI};
         function applyLayoutUI(layout) {
             const root = document.documentElement;
@@ -67,6 +67,8 @@
             root.style.setProperty('--sys-card-py', layout.cardPy + 'px');
             root.style.setProperty('--sys-log-w', layout.logWidth + 'px');
             root.style.setProperty('--sys-border-w', layout.borderW + 'px');
+            root.style.setProperty('--sys-log-h', layout.logHeight + 'vh');
+            root.style.setProperty('--sys-name-gap', layout.nameGap + 'px');
         }
         applyLayoutUI(currentLayoutUI);
 
@@ -77,6 +79,8 @@
             document.getElementById('setCardPy').value = currentLayoutUI.cardPy;
             document.getElementById('setLogWidth').value = currentLayoutUI.logWidth;
             document.getElementById('setBorderW').value = currentLayoutUI.borderW;
+            document.getElementById('setLogHeight').value = currentLayoutUI.logHeight;
+            document.getElementById('setNameGap').value = currentLayoutUI.nameGap;
             updateUIPreviewLabels();
             document.getElementById('uiSettingsModal').style.display = 'flex';
         };
@@ -93,7 +97,9 @@
                 cardPx: parseInt(document.getElementById('setCardPx').value),
                 cardPy: parseInt(document.getElementById('setCardPy').value),
                 logWidth: parseInt(document.getElementById('setLogWidth').value),
-                borderW: parseInt(document.getElementById('setBorderW').value)
+                borderW: parseInt(document.getElementById('setBorderW').value),
+                logHeight: parseInt(document.getElementById('setLogHeight').value),
+                nameGap: parseInt(document.getElementById('setNameGap').value)
             };
             localStorage.setItem('sysLayoutUI', JSON.stringify(currentLayoutUI));
             applyLayoutUI(currentLayoutUI);
@@ -114,7 +120,9 @@
                 cardPx: parseInt(document.getElementById('setCardPx').value),
                 cardPy: parseInt(document.getElementById('setCardPy').value),
                 logWidth: parseInt(document.getElementById('setLogWidth').value),
-                borderW: parseInt(document.getElementById('setBorderW').value)
+                borderW: parseInt(document.getElementById('setBorderW').value),
+                logHeight: parseInt(document.getElementById('setLogHeight').value),
+                nameGap: parseInt(document.getElementById('setNameGap').value)
             };
             applyLayoutUI(tempLayout);
             updateUIPreviewLabels();
@@ -127,6 +135,8 @@
             document.getElementById('valCardPy').innerText = document.getElementById('setCardPy').value + 'px';
             document.getElementById('valLogWidth').innerText = document.getElementById('setLogWidth').value + 'px';
             document.getElementById('valBorderW').innerText = document.getElementById('setBorderW').value + 'px';
+            document.getElementById('valLogHeight').innerText = document.getElementById('setLogHeight').value + 'vh';
+            document.getElementById('valNameGap').innerText = document.getElementById('setNameGap').value + 'px';
         }
 
         window.openUserNameModal = () => {
@@ -971,7 +981,7 @@
                                     <div class="pos-col">
                                         ${posHtml}
                                     </div>
-                                    <span class="player-name" style="font-size: 0.85rem; margin-left: 4px;">${p.nickName || '-'}</span>
+                                    <span class="player-name" style="font-size: 0.85rem; margin-left: var(--sys-name-gap);">${p.nickName || '-'}</span>
                                 </div>
                             </div>
                             <div class="card-actions">
@@ -1066,7 +1076,7 @@
                                     <div class="pos-col">
                                         ${posHtml}
                                     </div>
-                                    <span class="player-name" style="margin-left: 4px;">${displayNameCombined} ${activeTab === 'players' ? `(${rankLabel})` : ''}</span>
+                                    <span class="player-name" style="margin-left: var(--sys-name-gap);">${displayNameCombined} ${activeTab === 'players' ? `(${rankLabel})` : ''}</span>
                                 </div>
                                 <div class="card-footer">DC: ${dcMerged} | ${p.note || '-'}</div>
                             </div>
@@ -1154,10 +1164,12 @@
             /* 動態版面設定變數 */
             --sys-gap-main: 12px;
             --sys-log-w: 320px;
+            --sys-log-h: 80vh;
             --sys-radius: 8px;
             --sys-border-w: 1px;
             --sys-card-px: 8px;
             --sys-card-py: 6px;
+            --sys-name-gap: 4px;
         }
         body { font-family: 'Segoe UI', sans-serif; background: var(--bg-color); color: var(--text-color); padding: 20px; box-sizing: border-box; margin: 0; }
         
@@ -1369,7 +1381,7 @@
             border: var(--sys-border-w) solid rgba(255,255,255,0.25);
             border-radius: var(--sys-radius);
             flex-shrink: 0;
-            height: 80vh;
+            height: var(--sys-log-h);
             position: sticky;
             top: 20px;
             display: flex;
@@ -1464,6 +1476,17 @@
         .img-preview-box img { max-width: 100%; max-height: 160px; border-radius: 4px; object-fit: contain; }
         .img-preview-remove { position: absolute; top: -8px; right: -8px; background: #ff4d4f; color: white; border: none; border-radius: 50%; width: 24px; height: 24px; font-size: 14px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
         .img-preview-remove:hover { background: #ff7875; }
+
+        /* 權限標籤與後台管理介面樣式 */
+        .role-badge { padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: bold; }
+        .role-badge.admin { background: rgba(255, 77, 79, 0.2); color: #ff4d4f; border: 1px solid rgba(255, 77, 79, 0.4); }
+        .role-badge.member { background: rgba(97, 218, 251, 0.2); color: #61dafb; border: 1px solid rgba(97, 218, 251, 0.4); }
+        .role-badge.guest { background: rgba(136, 146, 176, 0.2); color: #8892b0; border: 1px solid rgba(136, 146, 176, 0.4); }
+        
+        .admin-panel { display: flex; flex-direction: column; gap: 15px; }
+        .admin-section { background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px; border: 1px solid #2d455c; }
+        .admin-list-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .admin-list-item:last-child { border-bottom: none; }
 
         /* 版面設定 UI 樣式 */
         .ui-slider-group label { font-size: 0.85rem; color: #8892b0; font-weight: bold; }
@@ -1605,12 +1628,16 @@
                     操作日誌
                 </div>
                 <div style="display: flex; align-items: center; gap: 6px;">
+                    <div id="adminPanelBtn" class="sys-btn-icon" onclick="openAdminPanel()" title="用戶與權限管理" style="display: none;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    </div>
                     <div id="uiSettingsBtn" class="sys-btn-icon" onclick="openUISettings()" title="版面與外觀微調" style="display: none;">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
                     </div>
                     <div style="font-size: 10px; color: rgba(255,255,255,0.4); cursor: pointer; display: flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); transition: all 0.2s; background: rgba(0,0,0,0.2);" onclick="openUserNameModal()" onmouseover="this.style.color='#ffbae9'; this.style.borderColor='rgba(255,186,233,0.3)'" onmouseout="this.style.color='rgba(255,255,255,0.4)'; this.style.borderColor='rgba(255,255,255,0.1)'" title="修改操作者名稱">
+                        <span id="userRoleBadge" class="role-badge guest">訪客</span>
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                        <span id="displayUserName">管理員</span>
+                        <span id="displayUserName">未知</span>
                     </div>
                 </div>
             </div>
@@ -1779,6 +1806,20 @@
                         <label>日誌側邊欄寬度</label><span id="valLogWidth" class="val-badge">320px</span>
                     </div>
                     <input type="range" id="setLogWidth" min="200" max="600" value="320" oninput="previewUISettings()">
+                </div>
+
+                <div class="ui-slider-group">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                        <label>日誌側邊欄高度 (vh)</label><span id="valLogHeight" class="val-badge">80vh</span>
+                    </div>
+                    <input type="range" id="setLogHeight" min="30" max="100" value="80" oninput="previewUISettings()">
+                </div>
+                
+                <div class="ui-slider-group">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                        <label>位置標籤與名稱間距</label><span id="valNameGap" class="val-badge">4px</span>
+                    </div>
+                    <input type="range" id="setNameGap" min="0" max="40" value="4" oninput="previewUISettings()">
                 </div>
 
                 <div class="ui-slider-group">
