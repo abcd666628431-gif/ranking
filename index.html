@@ -738,6 +738,9 @@
             const savedImgUrl = p ? (p.imgUrl || '') : '';
             document.getElementById('imgUrl').value = savedImgUrl;
             window.updateImagePreview(savedImgUrl); 
+
+            // 暫存目前的備註內容，用於比對修改
+            document.getElementById('editId').dataset.oldNote = p ? (p.note || '') : '';
             
             let scoreVal = 'D';
             if (p) {
@@ -777,6 +780,8 @@
             const id = document.getElementById('editId').value;
             const scoreSelect = document.getElementById('score').value;
             const playerName = document.getElementById('name').value || '未知玩家';
+            const newNote = document.getElementById('note').value;
+            const oldNote = document.getElementById('editId').dataset.oldNote || '';
             
             let scoreNum = 35;
             if (scoreSelect === 'S+') scoreNum = 110;
@@ -796,14 +801,21 @@
                 dcName2: document.getElementById('dcName2').value || '',
                 score: scoreNum,
                 pos: selectedPos,
-                note: document.getElementById('note').value,
+                note: newNote,
                 imgUrl: document.getElementById('imgUrl').value || '',
                 createDate: document.getElementById('createDate').value || todayStr
             };
             closeModal();
             if (id) {
                 await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', activeTab, id), data);
-                writeLog('修改', playerName, `資料內容`);
+                
+                // 檢查是否修改了備註，若有則在日誌中顯示詳細內容
+                if (newNote !== oldNote) {
+                    const displayNote = newNote ? `更新備註為: [${newNote}]` : '清空了備註';
+                    writeLog('修改', playerName, displayNote);
+                } else {
+                    writeLog('修改', playerName, `資料內容`);
+                }
             } else {
                 await addDoc(getCol(activeTab), { ...data, order: dataStore[activeTab].length });
                 writeLog('錄入', playerName, `新增資料至系統`);
