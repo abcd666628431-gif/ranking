@@ -1325,10 +1325,10 @@
             -webkit-user-select: none; 
         }
         
-        .card-header { display: flex; align-items: center; gap: var(--sys-name-gap); white-space: nowrap; font-family: monospace, sans-serif; }
+        .card-header { display: flex; align-items: center; gap: var(--sys-name-gap); font-family: monospace, sans-serif; }
         .pos-col { display: flex; flex-direction: column; gap: 2px; align-items: center; justify-content: center; }
         .pos-badge { padding: 1px 4px; border-radius: 10px; color: #fff; font-size: 0.55rem; font-weight: 900; min-width: 26px; text-align: center; box-sizing: border-box; line-height: 1.2; letter-spacing: 0.5px; font-family: monospace, sans-serif; }
-        .player-name { font-weight: 900; font-family: monospace, sans-serif; font-size: 0.85rem; white-space: nowrap; letter-spacing: 0.5px; }
+        .player-name { font-weight: 900; font-family: monospace, sans-serif; font-size: 0.85rem; white-space: pre-wrap; word-break: break-word; letter-spacing: 0.5px; line-height: 1.2; }
         .card-footer { font-size: 0.85rem; color: #8892b0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: monospace, sans-serif; font-weight: 900; }
         
         .card-actions { 
@@ -1424,7 +1424,7 @@
             display: block;
         }
         
-        .tooltip-title { font-weight: bold; font-size: 0.95rem; color: #fff; margin-bottom: 6px; border-bottom: 1px solid #2d455c; padding-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tooltip-title { font-weight: bold; font-size: 0.95rem; color: #fff; margin-bottom: 6px; border-bottom: 1px solid #2d455c; padding-bottom: 4px; white-space: pre-wrap; word-break: break-word; }
         .tooltip-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; font-size: 0.8rem; margin-bottom: 4px; line-height: 1.4; }
         .tooltip-label { color: #8892b0; white-space: nowrap; }
         .tooltip-value { color: #e6edf3; font-weight: 500; }
@@ -1728,7 +1728,7 @@
             <div class="form-group" style="display: flex; gap: 10px;">
                 <div style="flex: 1;">
                     <label>遊戲 ID</label>
-                    <input type="text" id="name">
+                    <textarea id="name" rows="2" placeholder="可多行輸入..." style="resize: vertical; min-height: 42px;"></textarea>
                 </div>
                 <div style="flex: 1;">
                     <label>暱稱(顯示名)</label>
