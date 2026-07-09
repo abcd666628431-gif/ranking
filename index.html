@@ -54,7 +54,7 @@
         let activeView = localStorage.getItem('lol_activeView') || 'tier'; 
         
         let dataStore = { players: [], trash: [] };
-        let logsStore = []; // 存放日誌資料
+        let logsStore = []; 
         let selectedPos = []; 
         let sortableInstances = [];
         let sortableListInstance = null;
@@ -69,7 +69,7 @@
 
         const getCol = (col) => collection(db, 'artifacts', appId, 'public', 'data', col);
 
-        let isFirstVisit = !localStorage.getItem('sysUserName'); // 判斷是否為初次進入
+        let isFirstVisit = !localStorage.getItem('sysUserName'); 
         let sysUserName = localStorage.getItem('sysUserName') || '用戶_' + Math.floor(Math.random() * 900 + 100);
         let sysUserColor = localStorage.getItem('sysUserColor') || '#ffbae9';
 
@@ -77,7 +77,6 @@
         const defaultLayoutUI = { gapMain: 12, radius: 8, cardPx: 8, cardPy: 6, logWidth: 320, borderW: 1, tierBorderW: 1, cardBorderW: 1, logHeight: 600, nameGap: 4 };
         let currentLayoutUI = JSON.parse(localStorage.getItem('sysLayoutUI')) || {...defaultLayoutUI};
         
-        // 舊資料相容：如果 logHeight 小於等於 100 (代表是舊版的 vh 單位)，自動轉換為預設 600px
         if (currentLayoutUI.logHeight <= 100) currentLayoutUI.logHeight = 600;
 
         function applyLayoutUI(layout) {
@@ -88,13 +87,28 @@
             root.style.setProperty('--sys-card-py', layout.cardPy + 'px');
             root.style.setProperty('--sys-log-w', layout.logWidth + 'px');
             root.style.setProperty('--sys-border-w', layout.borderW + 'px');
-            // 相容舊資料，若無細分屬性則預設使用一般邊框寬度
             root.style.setProperty('--sys-tier-border-w', (layout.tierBorderW !== undefined ? layout.tierBorderW : layout.borderW) + 'px');
             root.style.setProperty('--sys-card-border-w', (layout.cardBorderW !== undefined ? layout.cardBorderW : layout.borderW) + 'px');
             root.style.setProperty('--sys-log-h', layout.logHeight + 'px');
             root.style.setProperty('--sys-name-gap', layout.nameGap + 'px');
         }
         applyLayoutUI(currentLayoutUI);
+
+        // 新增 OP.GG 自動產生邏輯
+        window.generateOPGGLink = () => {
+            const rawName = document.getElementById('name').value.trim();
+            // 由於支援多行，我們取第一行來判斷 Riot ID
+            const firstLine = rawName.split('\n')[0].trim();
+            if (!firstLine || !firstLine.includes('#')) {
+                showToast("遊戲 ID 第一行必須包含 # (例如: Name#Tag) 才能自動產生", "error");
+                return;
+            }
+            const [gameName, tagLine] = firstLine.split('#');
+            const region = document.getElementById('opggRegion').value;
+            const link = `https://www.op.gg/summoners/${region}/${encodeURIComponent(gameName)}-${encodeURIComponent(tagLine)}`;
+            document.getElementById('playerLink').value = link;
+            showToast("OP.GG 連結已自動產生！", "success");
+        };
 
         window.openUISettings = () => {
             document.getElementById('setGapMain').value = currentLayoutUI.gapMain;
@@ -112,7 +126,7 @@
         };
 
         window.closeUISettings = () => {
-            applyLayoutUI(currentLayoutUI); // 取消時復原畫面
+            applyLayoutUI(currentLayoutUI); 
             document.getElementById('uiSettingsModal').style.display = 'none';
         };
 
@@ -129,11 +143,10 @@
                 logHeight: parseInt(document.getElementById('setLogHeight').value),
                 nameGap: parseInt(document.getElementById('setNameGap').value)
             };
-            localStorage.setItem('sysLayoutUI', JSON.stringify(currentLayoutUI)); // 保留作為防閃爍快取
+            localStorage.setItem('sysLayoutUI', JSON.stringify(currentLayoutUI)); 
             applyLayoutUI(currentLayoutUI);
             document.getElementById('uiSettingsModal').style.display = 'none';
 
-            // 寫入 Firebase 進行全域強制同步
             if (currentUserRole === 'admin') {
                 try {
                     await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'layout'), currentLayoutUI);
@@ -148,7 +161,6 @@
             applyLayoutUI(currentLayoutUI);
             openUISettings(); 
 
-            // 寫入 Firebase 進行全域還原
             if (currentUserRole === 'admin') {
                 try {
                     await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'layout'), currentLayoutUI);
@@ -194,7 +206,6 @@
         };
 
         window.closeUserNameModal = () => {
-            // 如果是初次進入，必須填寫名字才能關閉
             if (isFirstVisit && !document.getElementById('newUserNameInput').value.trim()) {
                 const input = document.getElementById('newUserNameInput');
                 input.placeholder = "請輸入一個名稱開始使用！";
@@ -210,11 +221,9 @@
             const newColor = document.getElementById('newUserColorInput').value;
             
             if (newName) {
-                // 防冒用保護機制
                 const reservedWords = ['管理員', '系統', 'admin', 'system', 'godcloud'];
                 const isReserved = reservedWords.some(w => newName.toLowerCase().includes(w));
                 
-                // 如果目前不是管理員，卻想改名叫管理員，就擋下來
                 if (isReserved && currentUserRole !== 'admin' && newName !== '神雲') {
                     const input = document.getElementById('newUserNameInput');
                     input.value = '';
@@ -234,7 +243,6 @@
                 
                 isFirstVisit = false;
                 
-                // 記錄訪客足跡到資料庫
                 try {
                     const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'visitors', sysUserName);
                     await setDoc(userRef, {
@@ -243,18 +251,18 @@
                     }, { merge: true });
                 } catch(e) { console.error('Visitor tracking error:', e); }
 
-                checkPermissions(); // 重新驗證權限
+                checkPermissions(); 
                 updateUserDisplay();
                 renderLogs();
                 closeUserNameModal();
             }
         };
 
-        // 更新右上角顯示的名稱與身分標籤
         function updateUserDisplay() {
             const displayEl = document.getElementById('displayUserName');
             const roleBadge = document.getElementById('userRoleBadge');
             const adminBtn = document.getElementById('adminPanelBtn');
+            const uiBtn = document.getElementById('uiSettingsBtn');
             const logLockOverlay = document.getElementById('logLockOverlay');
             
             if(displayEl) {
@@ -275,37 +283,31 @@
                 }
             }
             
-            // 只有管理員能看到管理按鈕
-            if(adminBtn) {
-                adminBtn.style.display = currentUserRole === 'admin' ? 'flex' : 'none';
-            }
+            // 權限按鈕顯示
+            if(adminBtn) adminBtn.style.display = currentUserRole === 'admin' ? 'flex' : 'none';
+            if(uiBtn) uiBtn.style.display = currentUserRole === 'admin' ? 'flex' : 'none';
 
-            // 訪客日誌遮罩
             if(logLockOverlay) {
                 logLockOverlay.style.display = currentUserRole === 'guest' ? 'flex' : 'none';
             }
         }
 
-        // 權限驗證邏輯
         function checkPermissions() {
-            // 預設神雲為管理員
             if (sysUserName === '神雲') {
                 currentUserRole = 'admin';
                 isPlayersTabUnlocked = true;
                 localStorage.setItem('isUnlocked', 'true');
             } 
-            // 如果在授權名單中
             else if (authUsersStore[sysUserName]) {
-                currentUserRole = authUsersStore[sysUserName].role; // 'admin' 或 'member'
+                currentUserRole = authUsersStore[sysUserName].role; 
                 isPlayersTabUnlocked = true;
                 localStorage.setItem('isUnlocked', 'true');
             } 
-            // 否則為訪客
             else {
                 currentUserRole = 'guest';
-                isPlayersTabUnlocked = false; // 訪客鎖定評級榜
+                isPlayersTabUnlocked = false; 
                 localStorage.setItem('isUnlocked', 'false');
-                isEditMode = false; // 強制關閉編輯模式
+                isEditMode = false; 
                 const toggle = document.getElementById('editModeToggle');
                 if(toggle) toggle.checked = false;
                 toggleEditMode(false);
@@ -315,7 +317,6 @@
             render();
         }
 
-        // --- 用戶管理面板邏輯 ---
         window.openAdminPanel = () => {
             if (currentUserRole !== 'admin') return;
             renderAdminPanel();
@@ -326,7 +327,6 @@
             document.getElementById('adminModal').style.display = 'none';
         };
 
-        // 授權或更新用戶權限
         window.grantUserRole = async (userName, role = null) => {
             if (currentUserRole !== 'admin') return;
             
@@ -343,29 +343,25 @@
                     updatedAt: Date.now()
                 });
                 
-                // 若本身就在授權自己，立即更新權限
                 if (nameToGrant === sysUserName) {
                     checkPermissions();
                 }
                 
-                // 清空輸入框
                 const inputId = document.getElementById('grantUserId');
                 if(inputId) inputId.value = '';
                 
-                // 如果是透過提升訪客進來的，可能需要重新渲染面板
                 renderAdminPanel();
                 
             } catch(e) { console.error('Grant user error:', e); }
         };
 
-        // 移除授權
         window.revokeUser = async (userName) => {
             if (currentUserRole !== 'admin') return;
-            if (userName === '神雲') return; // 保護神雲不被拔權限
+            if (userName === '神雲') return; 
             
             try {
                 await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'auth_users', userName));
-                if (userName === sysUserName) checkPermissions(); // 若拔自己權限，立刻生效
+                if (userName === sysUserName) checkPermissions(); 
             } catch(e) { console.error('Revoke user error:', e); }
         };
 
@@ -374,12 +370,10 @@
             const visitorListEl = document.getElementById('visitorRecordList');
             if (!listEl || !visitorListEl) return;
             
-            // 防止名稱包含符號導致畫面亂碼破圖的安全處理
             const escapeHTML = str => String(str).replace(/[&<>'"]/g, tag => ({
                 '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
             }[tag]));
 
-            // 格式化出沒時間狀態
             const formatLastSeenTime = (timestamp) => {
                 if (!timestamp) return '<span style="color:#8892b0;">未知</span>';
                 const diff = Date.now() - timestamp;
@@ -395,10 +389,8 @@
                 return `<span style="color:#8892b0;">🕒 ${dateStr}</span>`;
             };
 
-            // 渲染授權名單
             listEl.innerHTML = '';
             
-            // 將授權名單也按最後上線時間排序
             const sortedAuthUsers = Object.values(authUsersStore).sort((a, b) => {
                 const timeA = visitorsStore[a.name]?.lastSeen || a.updatedAt || 0;
                 const timeB = visitorsStore[b.name]?.lastSeen || b.updatedAt || 0;
@@ -407,7 +399,7 @@
 
             sortedAuthUsers.forEach(u => {
                 const displaySafeName = escapeHTML(u.name);
-                const jsSafeName = String(u.name).replace(/\\/g, "\\\\").replace(/'/g, "\\'"); // 傳入按鈕事件用
+                const jsSafeName = String(u.name).replace(/\\/g, "\\\\").replace(/'/g, "\\'"); 
                 
                 const visitorData = visitorsStore[u.name];
                 const lastSeenTime = visitorData ? visitorData.lastSeen : (u.updatedAt || null);
@@ -429,12 +421,10 @@
                 listEl.appendChild(div);
             });
 
-            // 渲染訪客名單
             visitorListEl.innerHTML = '';
             
-            // 排序訪客，將最新的排前面
             const sortedVisitors = Object.values(visitorsStore)
-                .filter(v => v.name !== '神雲' && !authUsersStore[v.name]) // 排除神雲跟已授權的人
+                .filter(v => v.name !== '神雲' && !authUsersStore[v.name]) 
                 .sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
 
             if (sortedVisitors.length === 0) {
@@ -469,9 +459,7 @@
             document.getElementById('imageModal').style.display = 'none';
         };
 
-        // 寫入操作日誌函式
         window.writeLog = async (action, targetName, detail) => {
-            // 權限攔截：訪客不允許寫入修改日誌 (系統自動產生的例外)
             if (currentUserRole === 'guest' && action !== '系統') return; 
             
             try {
@@ -542,7 +530,6 @@
             sortableInstances.forEach(inst => inst.destroy());
             sortableInstances = [];
             
-            // 權限攔截：訪客強制禁用拖曳
             if (currentUserRole === 'guest') return; 
 
             const currentTab = activeTab;
@@ -594,7 +581,6 @@
             const listEl = document.getElementById('playerList');
             if (sortableListInstance) sortableListInstance.destroy();
             
-            // 權限攔截：訪客強制禁用拖曳
             if (currentUserRole === 'guest') return;
 
             const currentTab = activeTab;
@@ -616,14 +602,12 @@
 
         onAuthStateChanged(auth, (user) => {
             if (!user) return;
-            // 載入玩家與雷人名單
             ['players', 'trash'].forEach(col => {
                 onSnapshot(getCol(col), (snapshot) => {
                     let newData = [];
                     snapshot.forEach(d => newData.push({ id: d.id, ...d.data() }));
                     newData.sort((a, b) => (a.order || 0) - (b.order || 0));
                     
-                    // 🚀 性能優化：深度比對，資料若沒變更則「絕對不觸發」重繪 (解決 F5 刷新閃爍)
                     if (JSON.stringify(dataStore[col]) !== JSON.stringify(newData)) {
                         dataStore[col] = newData;
                         localStorage.setItem('lol_cache_dataStore', JSON.stringify(dataStore));
@@ -632,12 +616,10 @@
                 }, (err) => console.error("Firestore Error:", err));
             });
 
-            // 載入操作日誌 (最多顯示最新 50 筆)
             onSnapshot(query(getCol('logs'), orderBy('timestamp', 'desc'), limit(50)), (snapshot) => {
                 let newLogs = [];
                 snapshot.forEach(d => newLogs.push({ id: d.id, ...d.data() }));
                 
-                // 🚀 性能優化：日誌若沒變更則不觸發重繪
                 if (JSON.stringify(logsStore) !== JSON.stringify(newLogs)) {
                     logsStore = newLogs;
                     localStorage.setItem('lol_cache_logsStore', JSON.stringify(logsStore));
@@ -645,16 +627,14 @@
                 }
             }, (err) => console.error("Logs Error:", err));
 
-            // 監聽權限名單 (Auth Users)
             onSnapshot(getCol('auth_users'), (snapshot) => {
                 let newAuth = {};
                 snapshot.forEach(d => newAuth[d.id] = d.data());
                 authUsersStore = newAuth;
-                checkPermissions(); // 有變動時立刻重新驗證
+                checkPermissions(); 
                 if (document.getElementById('adminModal').style.display === 'flex') renderAdminPanel();
             }, (err) => console.error("AuthUsers Error:", err));
 
-            // 監聽訪客紀錄 (Visitors)
             onSnapshot(getCol('visitors'), (snapshot) => {
                 let newVisitors = {};
                 snapshot.forEach(d => newVisitors[d.id] = d.data());
@@ -662,25 +642,20 @@
                 if (document.getElementById('adminModal').style.display === 'flex') renderAdminPanel();
             }, (err) => console.error("Visitors Error:", err));
 
-            // 監聽全域版面設定同步 (Settings)
             onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'layout'), (snapshot) => {
                 if (snapshot.exists()) {
                     const globalLayout = snapshot.data();
-                    
-                    // 舊資料相容：防呆處理
                     if (globalLayout.logHeight <= 100) globalLayout.logHeight = 600; 
 
-                    // 檢查是否與當前版面不同，不同才觸發重繪 (避免自身儲存時的重複渲染)
                     if (JSON.stringify(currentLayoutUI) !== JSON.stringify(globalLayout)) {
                         currentLayoutUI = { ...defaultLayoutUI, ...globalLayout };
-                        localStorage.setItem('sysLayoutUI', JSON.stringify(currentLayoutUI)); // 更新本地快取
+                        localStorage.setItem('sysLayoutUI', JSON.stringify(currentLayoutUI)); 
                         applyLayoutUI(currentLayoutUI);
                     }
                 }
             }, (err) => console.error("Layout Sync Error:", err));
         });
 
-        // 攔截：強制只有會員與管理員可切換編輯模式
         window.toggleEditMode = (checked) => {
             if (currentUserRole === 'guest' && checked) {
                 showToast("權限不足：您必須是會員才能編輯版面！", "error");
@@ -699,7 +674,6 @@
             if (sortableListInstance) sortableListInstance.option("disabled", !isEditMode);
         };
 
-        // 性能優化：搜尋防抖 (Debounce)，防止輸入過快導致瘋狂重繪
         let searchTimeout;
         window.updateSearch = (val) => { 
             clearTimeout(searchTimeout);
@@ -715,46 +689,6 @@
             localStorage.setItem('lol_activeTab', tab);
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
             render();
-        };
-
-        window.showPasswordModal = () => document.getElementById('passwordModal').style.display = 'flex';
-        window.closePasswordModal = () => document.getElementById('passwordModal').style.display = 'none';
-
-        window.togglePasswordVisibility = () => {
-            const pwdInput = document.getElementById('passwordInput');
-            const toggleBtn = document.getElementById('togglePasswordBtn');
-            if (pwdInput.type === 'password') {
-                pwdInput.type = 'text';
-                toggleBtn.innerText = '🙈';
-            } else {
-                pwdInput.type = 'password';
-                toggleBtn.innerText = '👁️';
-            }
-        };
-
-        window.checkCapsLock = (e) => {
-            const warning = document.getElementById('capsLockWarning');
-            if (e.getModifierState && e.getModifierState('CapsLock')) {
-                warning.style.display = 'block';
-            } else {
-                warning.style.display = 'none';
-            }
-        };
-
-        window.verifyPassword = () => {
-            const pwd = document.getElementById('passwordInput').value;
-            if (pwd === 'GodCloud') {
-                isPlayersTabUnlocked = true;
-                localStorage.setItem('isUnlocked', 'true');
-                writeLog('解鎖', '系統', '已解鎖評級榜編輯權限');
-                closePasswordModal();
-                render();
-            } else {
-                const input = document.getElementById('passwordInput');
-                input.value = '';
-                input.placeholder = '密碼錯誤！';
-                setTimeout(() => input.placeholder = '輸入密碼...', 2000);
-            }
         };
 
         window.switchView = (view) => {
@@ -776,7 +710,6 @@
         };
 
         window.openModal = (id = '') => {
-            // 權限攔截：訪客禁止開啟編輯/新增視窗
             if (currentUserRole === 'guest') {
                 showToast("權限不足：您必須是會員才能新增或編輯！", "error");
                 return;
@@ -789,7 +722,7 @@
             document.getElementById('nickName').value = p ? (p.nickName || '') : '';
             document.getElementById('dcName').value = p ? (p.dcName || '') : '';
             document.getElementById('dcName2').value = p ? (p.dcName2 || '') : '';
-            document.getElementById('playerLink').value = p ? (p.link || '') : ''; // 載入連結
+            document.getElementById('playerLink').value = p ? (p.link || '') : ''; 
             document.getElementById('note').value = p ? p.note : '';
             
             const d = new Date();
@@ -800,7 +733,6 @@
             document.getElementById('imgUrl').value = savedImgUrl;
             window.updateImagePreview(savedImgUrl); 
 
-            // 暫存目前的備註內容，用於比對修改
             document.getElementById('editId').dataset.oldNote = p ? (p.note || '') : '';
             
             let scoreVal = 'D';
@@ -843,7 +775,7 @@
             const playerName = document.getElementById('name').value || '未知玩家';
             const newNote = document.getElementById('note').value;
             const oldNote = document.getElementById('editId').dataset.oldNote || '';
-            const playerLink = document.getElementById('playerLink').value || ''; // 讀取連結
+            const playerLink = document.getElementById('playerLink').value || ''; 
             
             let scoreNum = 35;
             if (scoreSelect === 'S+') scoreNum = 110;
@@ -864,7 +796,7 @@
                 score: scoreNum,
                 pos: selectedPos,
                 note: newNote,
-                link: playerLink, // 存入連結
+                link: playerLink, 
                 imgUrl: document.getElementById('imgUrl').value || '',
                 createDate: document.getElementById('createDate').value || todayStr
             };
@@ -872,7 +804,6 @@
             if (id) {
                 await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', activeTab, id), data);
                 
-                // 檢查是否修改了備註，若有則在日誌中顯示詳細內容
                 if (newNote !== oldNote) {
                     const displayNote = newNote ? `更新備註為: [${newNote}]` : '清空了備註';
                     writeLog('修改', playerName, displayNote);
@@ -882,7 +813,7 @@
             } else {
                 await addDoc(getCol(activeTab), { ...data, order: dataStore[activeTab].length });
                 writeLog('錄入', playerName, `新增資料至系統`);
-                playSuccessSound(); // 錄入成功時觸發輕聲音效
+                playSuccessSound(); 
             }
         };
 
@@ -933,7 +864,6 @@
             if (!numCol) return;
             numCol.innerHTML = '';
             
-            // 性能優化：使用 DocumentFragment 一次性渲染序號
             const frag = document.createDocumentFragment();
             rows.forEach((row, i) => {
                 const numDiv = document.createElement('div');
@@ -1000,7 +930,6 @@
             logContent.appendChild(logFrag);
         }
 
-        // 建立全域提示訊息工具
         window.showToast = (message, type = 'success') => {
             const toast = document.createElement('div');
             const bgColor = type === 'error' ? '#ff4d4f' : '#10B981';
@@ -1076,7 +1005,6 @@
                 if (t4Container) t4Container.innerHTML = '';
                 if (t5Container) t5Container.innerHTML = '';
 
-                // 性能優化：建立虛擬的 DOM 碎片，避免迴圈內不斷重繪觸發卡頓
                 const fragT0 = document.createDocumentFragment();
                 const fragT1 = document.createDocumentFragment();
                 const fragT2 = document.createDocumentFragment();
@@ -1104,7 +1032,6 @@
                     
                     const posHtml = posArray.map(pos => `<span class="pos-badge" style="background:${POS_COLORS[pos] || '#999'}">${pos}</span>`).join('');
                     
-                    // 處理名稱超連結
                     const nameHtml = p.link 
                         ? `<a href="${p.link}" target="_blank" class="player-link" style="text-decoration:none;" onclick="event.stopPropagation();">${p.nickName || '-'}</a>`
                         : `<span class="player-name" style="font-size: 0.85rem;">${p.nickName || '-'}</span>`;
@@ -1163,7 +1090,6 @@
                     }
                 });
                 
-                // 一次性寫入 DOM
                 if (t0Container) t0Container.appendChild(fragT0);
                 if (t1Container) t1Container.appendChild(fragT1);
                 if (t2Container) t2Container.appendChild(fragT2);
@@ -1179,7 +1105,6 @@
                 const list = document.getElementById('playerList');
                 list.innerHTML = '';
                 
-                // 性能優化：列表模式同樣使用 DocumentFragment
                 const listFrag = document.createDocumentFragment();
 
                 filtered.forEach((p) => {
@@ -1204,7 +1129,6 @@
                     const dcMerged = [p.dcName, p.dcName2].filter(x => x && x.trim() !== '').join(' / ') || '-';
                     const displayNameCombined = p.nickName ? `${p.name || '-'} (${p.nickName})` : (p.name || '-');
                     
-                    // 處理名稱超連結
                     const nameHtml = p.link
                         ? `<a href="${p.link}" target="_blank" class="player-link" style="text-decoration:none;" onclick="event.stopPropagation();">${displayNameCombined} ${activeTab === 'players' ? `(${rankLabel})` : ''}</a>`
                         : `<span class="player-name">${displayNameCombined} ${activeTab === 'players' ? `(${rankLabel})` : ''}</span>`;
@@ -1250,7 +1174,6 @@
                     listFrag.appendChild(row);
                 });
                 
-                // 一次性寫入 DOM
                 list.appendChild(listFrag);
 
                 requestAnimationFrame(() => syncNumberHeights());
@@ -1268,7 +1191,6 @@
         }
 
         setTimeout(() => {
-            // 初始化還原本機 UI 狀態設定
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === activeTab));
             document.querySelectorAll('.view-btn').forEach(b => b.classList.toggle('active', b.dataset.view === activeView));
             const searchEl = document.querySelector('.search-box');
@@ -1281,14 +1203,13 @@
                 displayEl.style.color = sysUserColor;
             }
 
+            // 開放特定按鈕給管理員
             const uiBtn = document.getElementById('uiSettingsBtn');
-            if(uiBtn) uiBtn.style.display = sysUserName === '神雲' ? 'flex' : 'none';
+            if(uiBtn) uiBtn.style.display = sysUserName === '神雲' || currentUserRole === 'admin' ? 'flex' : 'none';
 
-            // 初次進入網站，自動彈出修改名稱視窗
             if (isFirstVisit) {
                 openUserNameModal();
             } else {
-                // 如果已經不是初次，啟動時偷偷更新一次訪客的最後上線時間
                 try {
                     setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'visitors', sysUserName), {
                         name: sysUserName,
@@ -1315,7 +1236,6 @@
         }
         body { font-family: 'Segoe UI', sans-serif; background: var(--bg-color); color: var(--text-color); padding: 20px; box-sizing: border-box; margin: 0; }
         
-        /* 全新雙欄版面配置 */
         .main-wrapper { 
             display: flex; 
             max-width: 1200px; 
@@ -1325,15 +1245,13 @@
             padding-bottom: 120px; 
         }
         
-        /* 左側主介面容器 */
         .container { 
             flex: 1; 
-            min-width: 0; /* 防止子元素撐破 flex */
+            min-width: 0;
             max-width: 850px;
             position: relative; 
         }
         
-        /* 緊湊控制列設計 */
         .header { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
         .header h1 { margin: 0; font-size: 1.6rem; line-height: 1; }
         .logo { width: 45px; height: 45px; object-fit: cover; border-radius: var(--sys-radius); border: var(--sys-border-w) solid #2d455c; }
@@ -1416,7 +1334,6 @@
         .pos-badge { padding: 1px 4px; border-radius: 10px; color: #fff; font-size: 0.55rem; font-weight: 900; min-width: 26px; text-align: center; box-sizing: border-box; line-height: 1.2; letter-spacing: 0.5px; font-family: monospace, sans-serif; }
         .player-name { font-weight: 900; font-family: monospace, sans-serif; font-size: 0.85rem; white-space: pre-wrap; word-break: break-word; letter-spacing: 0.5px; line-height: 1.2; }
         
-        /* 玩家名稱連結樣式 */
         .player-link { 
             font-weight: 900; 
             font-family: monospace, sans-serif; 
@@ -1550,32 +1467,31 @@
         }
         
         .log-header {
-        padding: 10px 12px;
-        font-weight: 900;
-        font-size: 0.8rem;
-        color: rgba(255,255,255,0.8);
-        background: rgba(255,255,255,0.08); 
-        border-bottom: 1px solid rgba(255,255,255,0.2); 
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        text-transform: uppercase;
-        margin-bottom: 8px;
-    }
-    
-    .log-content {
-        padding: 0 10px 10px 10px;
-        overflow-y: auto;
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        font-family: monospace;
-        font-size: 13px;
-        color: rgba(255,255,255,0.7);
-    }
-    
-    /* 自訂捲軸完美還原 */
+            padding: 10px 12px;
+            font-weight: 900;
+            font-size: 0.8rem;
+            color: rgba(255,255,255,0.8);
+            background: rgba(255,255,255,0.08); 
+            border-bottom: 1px solid rgba(255,255,255,0.2); 
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+        
+        .log-content {
+            padding: 0 10px 10px 10px;
+            overflow-y: auto;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-family: monospace;
+            font-size: 13px;
+            color: rgba(255,255,255,0.7);
+        }
+        
         .log-content::-webkit-scrollbar { width: 4px; height: 4px; }
         .log-content::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); border-radius: 2px; }
         .log-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
@@ -1604,7 +1520,6 @@
             word-break: break-all;
         }
 
-        /* Modals and Forms */
         .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(10,18,25,0.9); justify-content: center; align-items: center; z-index: 1000; }
         .modal-content { background: var(--card-bg); padding: 25px; border-radius: calc(var(--sys-radius) + 8px); width: 90%; max-width: 400px; border: var(--sys-border-w) solid #2d455c; max-height: 90vh; overflow-y: auto; }
         
@@ -1636,7 +1551,6 @@
         .img-preview-remove { position: absolute; top: -8px; right: -8px; background: #ff4d4f; color: white; border: none; border-radius: 50%; width: 24px; height: 24px; font-size: 14px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
         .img-preview-remove:hover { background: #ff7875; }
 
-        /* 權限標籤與後台管理介面樣式 */
         .role-badge { padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: bold; }
         .role-badge.admin { background: rgba(255, 77, 79, 0.2); color: #ff4d4f; border: 1px solid rgba(255, 77, 79, 0.4); }
         .role-badge.member { background: rgba(97, 218, 251, 0.2); color: #61dafb; border: 1px solid rgba(97, 218, 251, 0.4); }
@@ -1647,7 +1561,6 @@
         .admin-list-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
         .admin-list-item:last-child { border-bottom: none; }
 
-        /* 版面設定 UI 樣式 */
         .ui-slider-group label { font-size: 0.85rem; color: #8892b0; font-weight: bold; }
         .val-badge { font-family: monospace; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: var(--accent); }
         input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; padding: 0; border: none; margin: 8px 0; }
@@ -1712,7 +1625,7 @@
                 <img src="https://i.pinimg.com/736x/d1/b1/1d/d1b11d5e4dbae547ac0d651476cec488.jpg" alt="Logo" class="logo">
                 <div style="display: flex; align-items: baseline; gap: 8px;">
                     <h1>玩家統計系統</h1>
-                    <span style="font-size: 0.9rem; color: #8892b0; font-weight: bold;">v1.2</span>
+                    <span style="font-size: 0.9rem; color: #8892b0; font-weight: bold;">v1.0</span>
                 </div>
             </div>
             <div class="tabs">
@@ -1787,9 +1700,11 @@
                     操作日誌
                 </div>
                 <div style="display: flex; align-items: center; gap: 6px;">
+                    <!-- 用戶與權限管理 -->
                     <div id="adminPanelBtn" class="sys-btn-icon" onclick="openAdminPanel()" title="用戶與權限管理" style="display: none;">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
                     </div>
+                    <!-- 版面微調 -->
                     <div id="uiSettingsBtn" class="sys-btn-icon" onclick="openUISettings()" title="版面與外觀微調" style="display: none;">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
                     </div>
@@ -1802,7 +1717,6 @@
             </div>
             <div style="position: relative; flex: 1; display: flex; flex-direction: column; min-height: 0;">
                 <div class="log-content" id="logContent">
-                    <!-- 日誌項目將在此動態載入 -->
                 </div>
                 <div id="logLockOverlay" class="lock-overlay" style="border-radius: 0;">
                     <div class="lock-icon" style="font-size: 2rem;">🔒</div>
@@ -1814,9 +1728,8 @@
     </div>
     
     <button class="fab" onclick="openModal()">+ 新增玩家</button>
-    
-    <!-- 系統已無密碼解鎖視窗，移除 passwordModal 區塊 -->
 
+    <!-- 新增/編輯玩家 Modal -->
     <div class="modal" id="modal">
         <div class="modal-content">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
@@ -1827,19 +1740,30 @@
                 </div>
             </div>
             <input type="hidden" id="editId">
+            
             <div class="form-group" style="display: flex; gap: 10px;">
                 <div style="flex: 1;">
-                    <label>遊戲 ID</label>
-                    <textarea id="name" rows="2" placeholder="可多行輸入..." style="resize: vertical; min-height: 42px;"></textarea>
+                    <label>遊戲 ID (自訂名稱)</label>
+                    <textarea id="name" rows="2" placeholder="可多行輸入 (如: Name#TW2)..." style="resize: vertical; min-height: 42px;"></textarea>
                 </div>
                 <div style="flex: 1;">
                     <label>暱稱(顯示名)</label>
                     <input type="text" id="nickName" placeholder="自訂名稱">
                 </div>
             </div>
-            <!-- 新增連結輸入框 -->
+            
             <div class="form-group">
-                <label>資料連結 (OP.GG 等)</label>
+                <label style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                    <span>資料連結 (OP.GG 等)</span>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <select id="opggRegion" style="padding: 2px 6px; font-size: 0.75rem; width: auto; background: #2d455c; border: 1px solid #162431; border-radius: 4px; color: white; cursor: pointer;">
+                            <option value="tw">TW</option>
+                            <option value="kr">KR</option>
+                            <option value="na">NA</option>
+                        </select>
+                        <button type="button" onclick="generateOPGGLink()" style="background: var(--accent); color: #000; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; cursor: pointer; transition: opacity 0.2s;">⚡ 自動產生</button>
+                    </div>
+                </label>
                 <input type="text" id="playerLink" placeholder="輸入網址 (如 https://op.gg/...)">
             </div>
             <div class="form-group">
@@ -1890,6 +1814,32 @@
         </div>
     </div>
 
+    <!-- Riot API 設定 Modal -->
+    <div class="modal" id="riotApiModal" style="z-index: 3500;">
+        <div class="modal-content" style="width: 90%; max-width: 400px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="margin: 0; color:#fff; display: flex; align-items: center; gap: 8px;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#61dafb" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                    Riot API 設定
+                </h2>
+                <button onclick="closeRiotApiSettings()" style="background: none; border: none; color: #8892b0; font-size: 1.5rem; cursor: pointer; padding: 0; line-height: 1;">×</button>
+            </div>
+            <p style="font-size: 0.85rem; color: #8892b0; margin-bottom: 20px; line-height: 1.5;">
+                請前往 <a href="https://developer.riotgames.com/" target="_blank" style="color: #61dafb;">Riot Developer Portal</a> 登入您的帳號，並將 <strong>Development API Key</strong> 貼在下方。
+                <br><br>
+                <span style="color: #ff4d4f;">注意：Riot 開發者金鑰有效期限僅有 24 小時，過期後需重新產生並在此更新。此金鑰僅會保存在您當前瀏覽器本地，非常安全。</span>
+            </p>
+            <div class="form-group">
+                <label>API Key</label>
+                <input type="text" id="riotApiKeyInput" placeholder="RGAPI-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" style="font-family: monospace;">
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top: 20px;">
+                <button onclick="closeRiotApiSettings()" style="padding:10px 20px; background:#2d455c; border:none; border-radius:6px; color:#fff; cursor:pointer;">取消</button>
+                <button onclick="saveRiotApiKey()" style="padding:10px 20px; background:#61dafb; border:none; border-radius:6px; color:#000; font-weight:bold; cursor:pointer;">儲存金鑰</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 使用者名稱設定 Modal -->
     <div class="modal" id="userNameModal" style="z-index: 3000;">
         <div class="modal-content" style="text-align: center; width: 90%; max-width: 320px;">
@@ -1916,15 +1866,12 @@
             </div>
             
             <div class="admin-panel">
-                <!-- 授權名單區塊 -->
                 <div class="admin-section">
                     <h3 style="margin: 0 0 10px 0; color: var(--accent); font-size: 1rem;">✅ 已授權名單</h3>
                     <div id="authUserList" style="max-height: 150px; overflow-y: auto; padding-right: 5px;">
-                        <!-- 授權用戶將動態載入 -->
                     </div>
                 </div>
 
-                <!-- 手動加入權限區塊 -->
                 <div class="admin-section">
                     <h3 style="margin: 0 0 10px 0; color: var(--accent); font-size: 1rem;">➕ 手動指派權限</h3>
                     <div style="display: flex; gap: 8px;">
@@ -1937,12 +1884,10 @@
                     </div>
                 </div>
 
-                <!-- 訪客紀錄區塊 -->
                 <div class="admin-section">
                     <h3 style="margin: 0 0 10px 0; color: #ffbf7f; font-size: 1rem;">👀 訪客出沒紀錄 (一鍵升級)</h3>
                     <div style="font-size: 0.8rem; color: #8892b0; margin-bottom: 8px;">以下是曾經在本系統設定過名稱的訪客名單，可直接將其升級為會員。</div>
                     <div id="visitorRecordList" style="max-height: 200px; overflow-y: auto; padding-right: 5px;">
-                        <!-- 訪客紀錄將動態載入 -->
                     </div>
                 </div>
             </div>
