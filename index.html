@@ -32,27 +32,16 @@
         // 新增：合成輕柔的 UI 提示音效 (Pop sound)
         window.playSuccessSound = () => {
             try {
-                const AudioContext = window.AudioContext || window.webkitAudioContext;
-                if (!AudioContext) return;
-                const ctx = new AudioContext();
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
                 const osc = ctx.createOscillator();
                 const gain = ctx.createGain();
-                
-                osc.type = 'sine';
-                // 設定清脆的音調下降效果
-                osc.frequency.setValueAtTime(800, ctx.currentTime); 
-                osc.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.1);
-                
-                // 設定低音量與淡出，產生輕聲感
-                gain.gain.setValueAtTime(0.15, ctx.currentTime); 
-                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
-                
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-                
-                osc.start();
-                osc.stop(ctx.currentTime + 0.1);
-            } catch (e) {
+                osc.connect(gain); gain.connect(ctx.destination);
+                osc.type = 'sine'; osc.frequency.setValueAtTime(880, ctx.currentTime);
+                gain.gain.setValueAtTime(0, ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.1, ctx.currentTime + 0.01);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+                osc.start(); osc.stop(ctx.currentTime + 0.2);
+            } catch(e) {
                 console.error("Audio play error:", e);
             }
         };
@@ -385,17 +374,57 @@
             const visitorListEl = document.getElementById('visitorRecordList');
             if (!listEl || !visitorListEl) return;
             
+            // 防止名稱包含符號導致畫面亂碼破圖的安全處理
+            const escapeHTML = str => String(str).replace(/[&<>'"]/g, tag => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+            }[tag]));
+
+            // 格式化出沒時間狀態
+            const formatLastSeenTime = (timestamp) => {
+                if (!timestamp) return '<span style="color:#8892b0;">未知</span>';
+                const diff = Date.now() - timestamp;
+                const minutes = Math.floor(diff / (60 * 1000));
+                const hours = Math.floor(diff / (60 * 60 * 1000));
+                
+                if (minutes < 5) return '<span style="color:#10B981; font-weight:bold;">🟢 當前在線</span>';
+                if (minutes < 60) return `<span style="color:#10B981;">🟢 ${minutes} 分鐘前</span>`;
+                if (hours < 24) return `<span style="color:#8892b0;">🕒 ${hours} 小時前</span>`;
+                
+                const d = new Date(timestamp);
+                const dateStr = d.toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute:'2-digit' });
+                return `<span style="color:#8892b0;">🕒 ${dateStr}</span>`;
+            };
+
             // 渲染授權名單
             listEl.innerHTML = '';
-            Object.values(authUsersStore).forEach(u => {
+            
+            // 將授權名單也按最後上線時間排序
+            const sortedAuthUsers = Object.values(authUsersStore).sort((a, b) => {
+                const timeA = visitorsStore[a.name]?.lastSeen || a.updatedAt || 0;
+                const timeB = visitorsStore[b.name]?.lastSeen || b.updatedAt || 0;
+                return timeB - timeA;
+            });
+
+            sortedAuthUsers.forEach(u => {
+                const displaySafeName = escapeHTML(u.name);
+                const jsSafeName = String(u.name).replace(/\\/g, "\\\\").replace(/'/g, "\\'"); // 傳入按鈕事件用
+                
+                const visitorData = visitorsStore[u.name];
+                const lastSeenTime = visitorData ? visitorData.lastSeen : (u.updatedAt || null);
+                const timeHtml = formatLastSeenTime(lastSeenTime);
+
                 const div = document.createElement('div');
                 div.className = 'admin-list-item';
+                div.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05);';
                 div.innerHTML = `
-                    <div>
-                        <strong>${u.name}</strong> 
-                        <span class="role-badge ${u.role === 'admin' ? 'admin' : 'member'}">${u.role === 'admin' ? '管理員' : '會員'}</span>
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="margin-bottom: 2px;">
+                            <strong style="color:#e6edf3; margin-right: 4px;">${displaySafeName}</strong> 
+                            <span class="role-badge ${u.role === 'admin' ? 'admin' : 'member'}">${u.role === 'admin' ? '管理員' : '會員'}</span>
+                        </div>
+                        <div style="font-size:10px; color:#8892b0;">出沒: ${timeHtml}</div>
                     </div>
-                    ${u.name !== '神雲' ? `<button onclick="revokeUser('${u.name}')" style="background:#ff4d4f; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">移除</button>` : '<span>不可移除</span>'}
+                    ${u.name !== '神雲' ? `<button onclick="revokeUser('${jsSafeName}')" style="background:#ff4d4f; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; flex-shrink: 0;">移除</button>` : '<span style="font-size:0.8rem; color:#8892b0; flex-shrink: 0;">不可移除</span>'}
                 `;
                 listEl.appendChild(div);
             });
@@ -412,15 +441,18 @@
                 visitorListEl.innerHTML = '<div style="color:#8892b0; text-align:center; padding: 10px;">目前沒有其他訪客紀錄。</div>';
             } else {
                 sortedVisitors.forEach(v => {
-                    const dateStr = new Date(v.lastSeen || 0).toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute:'2-digit' });
+                    const displaySafeName = escapeHTML(v.name);
+                    const jsSafeName = String(v.name).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+                    const timeHtml = formatLastSeenTime(v.lastSeen);
+
                     const div = document.createElement('div');
                     div.innerHTML = `
                         <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                            <div>
-                                <strong style="color:#e6edf3;">${v.name}</strong> 
-                                <div style="font-size:10px; color:#8892b0;">最後出沒: ${dateStr}</div>
+                            <div style="flex: 1; min-width: 0;">
+                                <strong style="color:#e6edf3;">${displaySafeName}</strong> 
+                                <div style="font-size:10px; color:#8892b0; margin-top:2px;">出沒: ${timeHtml}</div>
                             </div>
-                            <button onclick="grantUserRole('${v.name}', 'member')" style="background:#61dafb; color:#000; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:12px; font-weight:bold;">提升為會員</button>
+                            <button onclick="grantUserRole('${jsSafeName}', 'member')" style="background:#61dafb; color:#000; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:12px; font-weight:bold; flex-shrink: 0;">提升為會員</button>
                         </div>
                     `;
                     visitorListEl.appendChild(div);
@@ -1680,7 +1712,7 @@
                 <img src="https://i.pinimg.com/736x/d1/b1/1d/d1b11d5e4dbae547ac0d651476cec488.jpg" alt="Logo" class="logo">
                 <div style="display: flex; align-items: baseline; gap: 8px;">
                     <h1>玩家統計系統</h1>
-                    <span style="font-size: 0.9rem; color: #8892b0; font-weight: bold;">v1.0</span>
+                    <span style="font-size: 0.9rem; color: #8892b0; font-weight: bold;">v1.2</span>
                 </div>
             </div>
             <div class="tabs">
