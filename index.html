@@ -371,6 +371,70 @@
             } catch(e) { console.error('Revoke user error:', e); }
         };
 
+        // 開啟更名彈出視窗
+        window.openRenameUserModal = (oldName) => {
+            if (currentUserRole !== 'admin') return;
+            document.getElementById('renameOldName').value = oldName;
+            document.getElementById('renameNewNameInput').value = oldName;
+            document.getElementById('renameUserModal').style.display = 'flex';
+        };
+
+        window.closeRenameUserModal = () => {
+            document.getElementById('renameUserModal').style.display = 'none';
+        };
+
+        // 提交更名操作
+        window.submitRenameUser = async () => {
+            if (currentUserRole !== 'admin') return;
+            const oldName = document.getElementById('renameOldName').value;
+            const newName = document.getElementById('renameNewNameInput').value.trim();
+
+            if (!newName || newName === oldName) {
+                closeRenameUserModal();
+                return;
+            }
+            
+            const reservedWords = ['管理員', '系統', 'admin', 'system', 'godcloud'];
+            const isReserved = reservedWords.some(w => newName.toLowerCase().includes(w));
+            if (isReserved && newName !== '神雲') {
+                showToast("不能修改為系統保留字！", "error");
+                return;
+            }
+
+            try {
+                // 轉移訪客紀錄
+                if (visitorsStore[oldName]) {
+                    const data = visitorsStore[oldName];
+                    data.name = newName;
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'visitors', newName), data);
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'visitors', oldName));
+                }
+
+                // 轉移權限紀錄
+                if (authUsersStore[oldName]) {
+                    const data = authUsersStore[oldName];
+                    data.name = newName;
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'auth_users', newName), data);
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'auth_users', oldName));
+                }
+
+                // 如果管理員改了自己的名字，同步更新本地狀態
+                if (oldName === sysUserName) {
+                    sysUserName = newName;
+                    localStorage.setItem('sysUserName', newName);
+                    checkPermissions();
+                    updateUserDisplay();
+                }
+
+                writeLog('系統', '權限管理', `將用戶 [${oldName}] 更名為 [${newName}]`);
+                showToast("用戶名修改成功！", "success");
+                closeRenameUserModal();
+            } catch(e) {
+                console.error(e);
+                showToast("修改失敗，請檢查權限", "error");
+            }
+        };
+
         function renderAdminPanel() {
             const listEl = document.getElementById('authUserList');
             const visitorListEl = document.getElementById('visitorRecordList');
@@ -417,7 +481,7 @@
                 div.innerHTML = `
                     <div style="flex: 1; min-width: 0;">
                         <div style="margin-bottom: 2px;">
-                            <strong style="color:#e6edf3; margin-right: 4px;">${displaySafeName}</strong> 
+                            <strong style="color:#e6edf3; margin-right: 4px; cursor: pointer;" ondblclick="openRenameUserModal('${jsSafeName}')" title="雙擊修改名稱">${displaySafeName}</strong> 
                             <span class="role-badge ${u.role === 'admin' ? 'admin' : 'member'}">${u.role === 'admin' ? '管理員' : '會員'}</span>
                         </div>
                         <div style="font-size:10px; color:#8892b0;">出沒: ${timeHtml}</div>
@@ -445,7 +509,7 @@
                     div.innerHTML = `
                         <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
                             <div style="flex: 1; min-width: 0;">
-                                <strong style="color:#e6edf3;">${displaySafeName}</strong> 
+                                <strong style="color:#e6edf3; cursor: pointer;" ondblclick="openRenameUserModal('${jsSafeName}')" title="雙擊修改名稱">${displaySafeName}</strong> 
                                 <div style="font-size:10px; color:#8892b0; margin-top:2px;">出沒: ${timeHtml}</div>
                             </div>
                             <button onclick="grantUserRole('${jsSafeName}', 'member')" style="background:#61dafb; color:#000; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:12px; font-weight:bold; flex-shrink: 0;">提升為會員</button>
@@ -961,17 +1025,12 @@
 
             if (!tierList || !listNormal) return;
 
-            if (activeTab === 'players' && !isPlayersTabUnlocked) {
+            const isLocked = activeTab === 'players' && !isPlayersTabUnlocked;
+
+            if (isLocked) {
                 lockOverlay.style.display = 'flex';
                 fabBtn.style.display = 'none'; 
-                
-                // 【安全修復】徹底清空底下的 DOM 結構，防止 F12 刪除遮罩偷看
-                const tContainers = ['tier-T0', 'tier-T1', 'tier-T2', 'tier-T3', 'tier-T4', 'tier-T5'];
-                tContainers.forEach(id => { const el = document.getElementById(id); if(el) el.innerHTML = ''; });
-                const list = document.getElementById('playerList');
-                if(list) list.innerHTML = '';
-                
-                return; // 直接中斷函數，不再把資料畫到網頁上
+                // 【優化】不再清空 DOM 中斷渲染，改為在下方產生「加密馬賽克資料」，保留背景的毛玻璃視覺且防止 F12 偷看！
             } else {
                 lockOverlay.style.display = 'none';
                 fabBtn.style.display = 'block'; 
@@ -1041,6 +1100,15 @@
                     const rankLabel = score >= 105 ? tierLabels[0] : score >= 90 ? tierLabels[1] : score >= 75 ? tierLabels[2] : score >= 60 ? tierLabels[3] : score >= 45 ? tierLabels[4] : tierLabels[5];
                     const displayRank = rankLabel.endsWith('級') ? rankLabel : `${rankLabel} 級`;
                     
+                    // 【視覺加密處理】如果是鎖定狀態，把真實文字替換成假色塊
+                    const dispName = isLocked ? '██████' : (p.name || '-');
+                    const dispNick = isLocked ? '█████' : (p.nickName || '-');
+                    const dispDc1 = isLocked ? '████' : (p.dcName || '-');
+                    const dispDc2 = isLocked ? '' : (p.dcName2 || '');
+                    const dispNote = isLocked ? '🔒 機密情報，請解鎖會員' : (p.note || '-');
+                    const dispLink = isLocked ? null : p.link;
+                    const dispImg = isLocked ? null : p.imgUrl;
+
                     let posArray = [];
                     if (Array.isArray(p.pos)) {
                         posArray = p.pos;
@@ -1051,9 +1119,9 @@
                     
                     const posHtml = posArray.map(pos => `<span class="pos-badge" style="background:${POS_COLORS[pos] || '#999'}">${pos}</span>`).join('');
                     
-                    const nameHtml = p.link 
-                        ? `<a href="${p.link}" target="_blank" class="player-link" style="text-decoration:none;" onclick="event.stopPropagation();">${p.nickName || '-'}</a>`
-                        : `<span class="player-name" style="font-size: 0.85rem;">${p.nickName || '-'}</span>`;
+                    const nameHtml = dispLink 
+                        ? `<a href="${dispLink}" target="_blank" class="player-link" style="text-decoration:none;" onclick="event.stopPropagation();">${dispNick}</a>`
+                        : `<span class="player-name" style="font-size: 0.85rem;">${dispNick}</span>`;
 
                     row.innerHTML = `
                         <div class="player-card">
@@ -1071,25 +1139,25 @@
                             </div>
                             
                             <div class="card-tooltip">
-                                <div class="tooltip-title">${p.name || '-'}</div>
+                                <div class="tooltip-title">${dispName}</div>
                                 <div class="tooltip-grid">
                                     <div class="tooltip-label">暱稱</div>
-                                    <div class="tooltip-value">${p.nickName || '-'}</div>
+                                    <div class="tooltip-value">${dispNick}</div>
                                     <div class="tooltip-label">DC 名稱</div>
-                                    <div class="tooltip-value">${p.dcName || '-'}${p.dcName2 ? `<br>${p.dcName2}` : ''}</div>
+                                    <div class="tooltip-value">${dispDc1}${dispDc2 ? `<br>${dispDc2}` : ''}</div>
                                     <div class="tooltip-label">${rankTitle}</div>
                                     <div class="tooltip-value">${displayRank}</div>
                                     <div class="tooltip-label">建立日期</div>
-                                    <div class="tooltip-value">${p.createDate || '-'}</div>
+                                    <div class="tooltip-value">${isLocked ? '██-██-██' : (p.createDate || '-')}</div>
                                     <div class="tooltip-label">位置</div>
                                     <div class="tooltip-value" style="display: flex; gap: 2px; flex-wrap: wrap; align-items: center;">
                                         ${posHtml}
                                     </div>
                                 </div>
                                 <div class="tooltip-line" style="border-top: 1px dashed #2d455c; margin-top: 6px; padding-top: 4px; white-space: normal;">
-                                    備註: <span>${p.note || '-'}</span>
+                                    備註: <span>${dispNote}</span>
                                 </div>
-                                ${p.imgUrl ? `<div style="margin-top:6px; text-align:center;"><img src="${p.imgUrl}" onclick="openImageModal('${p.imgUrl}')" style="max-width:100%; border-radius:4px; max-height:200px; object-fit:contain; cursor:zoom-in;"></div>` : ''}
+                                ${dispImg ? `<div style="margin-top:6px; text-align:center;"><img src="${dispImg}" onclick="openImageModal('${dispImg}')" style="max-width:100%; border-radius:4px; max-height:200px; object-fit:contain; cursor:zoom-in;"></div>` : ''}
                             </div>
                         </div>
                     `;
@@ -1135,6 +1203,15 @@
                     const rankLabel = score >= 105 ? tierLabels[0] : score >= 90 ? tierLabels[1] : score >= 75 ? tierLabels[2] : score >= 60 ? tierLabels[3] : score >= 45 ? tierLabels[4] : tierLabels[5];
                     const displayRank = rankLabel.endsWith('級') ? rankLabel : `${rankLabel} 級`;
 
+                    // 【視覺加密處理】
+                    const dispName = isLocked ? '██████' : (p.name || '-');
+                    const dispNick = isLocked ? '█████' : (p.nickName || '-');
+                    const dispDc1 = isLocked ? '████' : (p.dcName || '-');
+                    const dispDc2 = isLocked ? '' : (p.dcName2 || '');
+                    const dispNote = isLocked ? '🔒 機密情報，請解鎖會員' : (p.note || '-');
+                    const dispLink = isLocked ? null : p.link;
+                    const dispImg = isLocked ? null : p.imgUrl;
+
                     let posArray = [];
                     if (Array.isArray(p.pos)) {
                         posArray = p.pos;
@@ -1145,11 +1222,11 @@
                     
                     const posHtml = posArray.map(pos => `<span class="pos-badge" style="background:${POS_COLORS[pos] || '#999'}">${pos}</span>`).join('');
 
-                    const dcMerged = [p.dcName, p.dcName2].filter(x => x && x.trim() !== '').join(' / ') || '-';
-                    const displayNameCombined = p.nickName ? `${p.name || '-'} (${p.nickName})` : (p.name || '-');
+                    const dcMerged = isLocked ? '████' : [p.dcName, p.dcName2].filter(x => x && x.trim() !== '').join(' / ') || '-';
+                    const displayNameCombined = dispNick !== '-' && dispNick !== '█████' ? `${dispName} (${dispNick})` : dispName;
                     
-                    const nameHtml = p.link
-                        ? `<a href="${p.link}" target="_blank" class="player-link" style="text-decoration:none;" onclick="event.stopPropagation();">${displayNameCombined} ${activeTab === 'players' ? `(${rankLabel})` : ''}</a>`
+                    const nameHtml = dispLink
+                        ? `<a href="${dispLink}" target="_blank" class="player-link" style="text-decoration:none;" onclick="event.stopPropagation();">${displayNameCombined} ${activeTab === 'players' ? `(${rankLabel})` : ''}</a>`
                         : `<span class="player-name">${displayNameCombined} ${activeTab === 'players' ? `(${rankLabel})` : ''}</span>`;
 
                     row.innerHTML = `
@@ -1161,32 +1238,32 @@
                                     </div>
                                     ${nameHtml}
                                 </div>
-                                <div class="card-footer">DC: ${dcMerged} | ${p.note || '-'}</div>
+                                <div class="card-footer">DC: ${dcMerged} | ${dispNote}</div>
                             </div>
-                            ${p.imgUrl ? `<div class="card-img" style="margin-right:8px;"><img src="${p.imgUrl}" style="max-height:30px; border-radius:4px;"></div>` : ''}
+                            ${dispImg ? `<div class="card-img" style="margin-right:8px;"><img src="${dispImg}" style="max-height:30px; border-radius:4px;"></div>` : ''}
                                 <span class="menu-dots" onclick="openModal('${p.id}')" title="編輯">⋮</span>
                             </div>
 
                             <div class="card-tooltip">
-                                <div class="tooltip-title">${p.name || '-'}</div>
+                                <div class="tooltip-title">${dispName}</div>
                                 <div class="tooltip-grid">
                                     <div class="tooltip-label">暱稱</div>
-                                    <div class="tooltip-value">${p.nickName || '-'}</div>
+                                    <div class="tooltip-value">${dispNick}</div>
                                     <div class="tooltip-label">DC 名稱</div>
-                                    <div class="tooltip-value">${p.dcName || '-'}${p.dcName2 ? `<br>${p.dcName2}` : ''}</div>
+                                    <div class="tooltip-value">${dispDc1}${dispDc2 ? `<br>${dispDc2}` : ''}</div>
                                     <div class="tooltip-label">${rankTitle}</div>
                                     <div class="tooltip-value">${displayRank}</div>
                                     <div class="tooltip-label">建立日期</div>
-                                    <div class="tooltip-value">${p.createDate || '-'}</div>
+                                    <div class="tooltip-value">${isLocked ? '██-██-██' : (p.createDate || '-')}</div>
                                     <div class="tooltip-label">位置</div>
                                     <div class="tooltip-value" style="display: flex; gap: 2px; flex-wrap: wrap; align-items: center;">
                                         ${posHtml}
                                     </div>
                                 </div>
                                 <div class="tooltip-line" style="border-top: 1px dashed #2d455c; margin-top: 6px; padding-top: 4px; white-space: normal;">
-                                    備註: <span>${p.note || '-'}</span>
+                                    備註: <span>${dispNote}</span>
                                 </div>
-                                ${p.imgUrl ? `<div style="margin-top:6px; text-align:center;"><img src="${p.imgUrl}" onclick="openImageModal('${p.imgUrl}')" style="max-width:100%; border-radius:4px; max-height:200px; object-fit:contain; cursor:zoom-in;"></div>` : ''}
+                                ${dispImg ? `<div style="margin-top:6px; text-align:center;"><img src="${dispImg}" onclick="openImageModal('${dispImg}')" style="max-width:100%; border-radius:4px; max-height:200px; object-fit:contain; cursor:zoom-in;"></div>` : ''}
                             </div>
                         </div>
                     `;
@@ -1601,9 +1678,9 @@
         .sys-btn-icon:hover { background: var(--accent); color: #000; border-color: var(--accent); }
 
         @media (max-width: 900px) {
-            .main-wrapper { flex-direction: column; }
+            .main-wrapper { flex-direction: column; align-items: stretch; }
             .log-sidebar { width: 100%; position: relative; top: 0; height: 350px; }
-            .container { max-width: 100%; }
+            .container { max-width: 100%; width: 100%; }
         }
 
         @media (max-width: 600px) {
@@ -1654,7 +1731,7 @@
                 <img src="https://i.pinimg.com/736x/d1/b1/1d/d1b11d5e4dbae547ac0d651476cec488.jpg" alt="Logo" class="logo">
                 <div style="display: flex; align-items: baseline; gap: 8px;">
                     <h1>玩家統計系統</h1>
-                    <span style="font-size: 0.9rem; color: #8892b0; font-weight: bold;">v1.5</span>
+                    <span style="font-size: 0.9rem; color: #8892b0; font-weight: bold;">v1.6</span>
                 </div>
             </div>
             <div class="tabs">
@@ -1882,6 +1959,22 @@
             </div>
             <div style="display:flex; justify-content:center; gap:10px; margin-top: 20px;">
                 <button onclick="saveUserName()" style="padding:10px 40px; background:var(--accent); border:none; border-radius:6px; color:#000; font-weight:bold; cursor:pointer;">儲存設定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 用戶更名 Modal -->
+    <div class="modal" id="renameUserModal" style="z-index: 3600;">
+        <div class="modal-content" style="text-align: center; width: 90%; max-width: 320px;">
+            <h2 style="margin-top:0; color:#fff;">修改用戶名稱</h2>
+            <p style="font-size: 0.8rem; color: #8892b0; margin-bottom: 15px;">此操作將同步修改該用戶的權限與訪客紀錄。</p>
+            <input type="hidden" id="renameOldName">
+            <div class="form-group">
+                <input type="text" id="renameNewNameInput" placeholder="輸入新的用戶名稱..." style="text-align: center; font-size: 1.1rem; padding: 12px; font-weight: bold;">
+            </div>
+            <div style="display:flex; justify-content:center; gap:10px; margin-top: 20px;">
+                <button onclick="closeRenameUserModal()" style="padding:10px 20px; background:#2d455c; border:none; border-radius:6px; color:#fff; cursor:pointer;">取消</button>
+                <button onclick="submitRenameUser()" style="padding:10px 20px; background:var(--accent); border:none; border-radius:6px; color:#000; font-weight:bold; cursor:pointer;">確認修改</button>
             </div>
         </div>
     </div>
