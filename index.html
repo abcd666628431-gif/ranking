@@ -964,6 +964,14 @@
             if (activeTab === 'players' && !isPlayersTabUnlocked) {
                 lockOverlay.style.display = 'flex';
                 fabBtn.style.display = 'none'; 
+                
+                // 【安全修復】徹底清空底下的 DOM 結構，防止 F12 刪除遮罩偷看
+                const tContainers = ['tier-T0', 'tier-T1', 'tier-T2', 'tier-T3', 'tier-T4', 'tier-T5'];
+                tContainers.forEach(id => { const el = document.getElementById(id); if(el) el.innerHTML = ''; });
+                const list = document.getElementById('playerList');
+                if(list) list.innerHTML = '';
+                
+                return; // 直接中斷函數，不再把資料畫到網頁上
             } else {
                 lockOverlay.style.display = 'none';
                 fabBtn.style.display = 'block'; 
@@ -1646,7 +1654,7 @@
                 <img src="https://i.pinimg.com/736x/d1/b1/1d/d1b11d5e4dbae547ac0d651476cec488.jpg" alt="Logo" class="logo">
                 <div style="display: flex; align-items: baseline; gap: 8px;">
                     <h1>玩家統計系統</h1>
-                    <span style="font-size: 0.9rem; color: #8892b0; font-weight: bold;">v1.4</span>
+                    <span style="font-size: 0.9rem; color: #8892b0; font-weight: bold;">v1.5</span>
                 </div>
             </div>
             <div class="tabs">
