@@ -53,8 +53,13 @@
         let searchQuery = localStorage.getItem('lol_searchQuery') || '';
         let activeView = localStorage.getItem('lol_activeView') || 'tier'; 
         
+        // 秒開優化：初始直接讀取本地快取，不必等待伺服器連線
         let dataStore = { players: [], trash: [] };
+        try { const c = localStorage.getItem('lol_cache_dataStore'); if (c) dataStore = JSON.parse(c); } catch(e){}
+        
         let logsStore = []; 
+        try { const c = localStorage.getItem('lol_cache_logsStore'); if (c) logsStore = JSON.parse(c); } catch(e){}
+
         let selectedPos = []; 
         let sortableInstances = [];
         let sortableListInstance = null;
@@ -65,6 +70,7 @@
         // 宣告全域變數
         let currentUserRole = 'guest'; 
         let authUsersStore = {};
+        try { const c = localStorage.getItem('lol_cache_authStore'); if (c) authUsersStore = JSON.parse(c); } catch(e){}
         let visitorsStore = {};
 
         const getCol = (col) => collection(db, 'artifacts', appId, 'public', 'data', col);
@@ -630,9 +636,14 @@
             onSnapshot(getCol('auth_users'), (snapshot) => {
                 let newAuth = {};
                 snapshot.forEach(d => newAuth[d.id] = d.data());
-                authUsersStore = newAuth;
-                checkPermissions(); 
-                if (document.getElementById('adminModal').style.display === 'flex') renderAdminPanel();
+                
+                // 比對快取，有變化才更新與重新驗證，避免畫面閃爍
+                if (JSON.stringify(authUsersStore) !== JSON.stringify(newAuth)) {
+                    authUsersStore = newAuth;
+                    localStorage.setItem('lol_cache_authStore', JSON.stringify(authUsersStore));
+                    checkPermissions(); 
+                    if (document.getElementById('adminModal').style.display === 'flex') renderAdminPanel();
+                }
             }, (err) => console.error("AuthUsers Error:", err));
 
             onSnapshot(getCol('visitors'), (snapshot) => {
@@ -1190,12 +1201,16 @@
             signInAnonymously(auth);
         }
 
+        // 極速渲染優化：將啟動延遲縮短，並立即呼叫快取渲染
         setTimeout(() => {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === activeTab));
             document.querySelectorAll('.view-btn').forEach(b => b.classList.toggle('active', b.dataset.view === activeView));
             const searchEl = document.querySelector('.search-box');
             if (searchEl) searchEl.value = searchQuery;
-            render();
+            
+            // 立即渲染本地快取的玩家資料、日誌與權限身分 (0.1秒出畫面)
+            checkPermissions(); 
+            renderLogs();
             
             const displayEl = document.getElementById('displayUserName');
             if(displayEl) {
@@ -1242,7 +1257,7 @@
             margin: 0 auto; 
             gap: var(--sys-gap-main); 
             align-items: flex-start; 
-            padding-bottom: 120px; 
+            /* 移除了原本的 padding-bottom: 120px; 避免全域產生多餘滑動空間 */
         }
         
         .container { 
@@ -1277,7 +1292,13 @@
         .view-btn { padding: 10px 14px; background: #162431; border: var(--sys-border-w) solid #2d455c; color: #8892b0; cursor: pointer; border-radius: var(--sys-radius); font-weight: bold; font-size: 0.9rem; transition: all 0.2s; }
         .view-btn.active { background: var(--accent); color: #0a1219; }
 
-        .list-container { width: 100%; position: relative; min-height: 400px; border-radius: 12px; }
+        .list-container { 
+            width: 100%; 
+            position: relative; 
+            min-height: 400px; 
+            border-radius: 12px; 
+            padding-bottom: 85px; /* 將防擋底部的空白精準移到這裡，並縮小高度 */
+        }
         
         .lock-overlay { position: absolute; inset: 0; z-index: 90; display: none; justify-content: center; align-items: center; background: rgba(10,18,25,0.1); backdrop-filter: blur(10px); border-radius: 12px; flex-direction: column; gap: 15px; }
         .lock-icon { font-size: 3rem; }
@@ -1572,14 +1593,14 @@
         .sys-btn-icon:hover { background: var(--accent); color: #000; border-color: var(--accent); }
 
         @media (max-width: 900px) {
-            .main-wrapper { flex-direction: column; padding-bottom: 120px; }
+            .main-wrapper { flex-direction: column; }
             .log-sidebar { width: 100%; position: relative; top: 0; height: 350px; }
             .container { max-width: 100%; }
         }
 
         @media (max-width: 600px) {
             body { padding: 10px; }
-            .main-wrapper { padding-bottom: 100px; }
+            .main-wrapper { }
             .header { margin-bottom: 8px; }
             .header h1 { font-size: 1.4rem; }
             .logo { width: 40px; height: 40px; }
