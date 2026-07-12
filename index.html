@@ -852,6 +852,12 @@
             const oldNote = document.getElementById('editId').dataset.oldNote || '';
             const playerLink = document.getElementById('playerLink').value || ''; 
             
+            // 檢查是否選擇了位置防呆
+            if (selectedPos.length === 0) {
+                showToast("請至少選擇一個位置！", "error");
+                return;
+            }
+
             let scoreNum = 35;
             if (scoreSelect === 'S+') scoreNum = 110;
             else if (scoreSelect === 'S') scoreNum = 95;
@@ -886,7 +892,13 @@
                     writeLog('修改', playerName, `資料內容`);
                 }
             } else {
-                await addDoc(getCol(activeTab), { ...data, order: dataStore[activeTab].length });
+                // 將新加入的卡片排序權重設為最小，確保它總是置頂於列表的第一個
+                let minOrder = 0;
+                if (dataStore[activeTab].length > 0) {
+                    minOrder = Math.min(...dataStore[activeTab].map(p => p.order || 0));
+                }
+                
+                await addDoc(getCol(activeTab), { ...data, order: minOrder - 1 });
                 writeLog('錄入', playerName, `新增資料至系統`);
                 playSuccessSound(); 
             }
@@ -1115,7 +1127,7 @@
                     } else if (typeof p.pos === 'string') {
                         posArray = p.pos.split(',').map(s => s.trim()).filter(Boolean);
                     }
-                    if (posArray.length === 0) posArray = ['TOP'];
+                    if (posArray.length === 0) posArray = ['未定'];
                     
                     const posHtml = posArray.map(pos => `<span class="pos-badge" style="background:${POS_COLORS[pos] || '#999'}">${pos}</span>`).join('');
                     
@@ -1218,7 +1230,7 @@
                     } else if (typeof p.pos === 'string') {
                         posArray = p.pos.split(',').map(s => s.trim()).filter(Boolean);
                     }
-                    if (posArray.length === 0) posArray = ['TOP'];
+                    if (posArray.length === 0) posArray = ['未定'];
                     
                     const posHtml = posArray.map(pos => `<span class="pos-badge" style="background:${POS_COLORS[pos] || '#999'}">${pos}</span>`).join('');
 
@@ -1421,8 +1433,15 @@
             border: var(--sys-card-border-w) solid #2d455c; 
             gap: 4px; 
             position: relative; 
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); /* 加入平滑過場動畫 */
         }
-        .player-card:hover { z-index: 100; }
+        .player-card:hover { 
+            z-index: 100; 
+            border-color: var(--accent); /* 邊框變色高亮 */
+            background: #162635; /* 背景稍微提亮 */
+            box-shadow: 0 6px 16px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(97, 218, 251, 0.2); /* 增加立體陰影與微微內發光 */
+            transform: translateY(-2px); /* 產生懸浮上移效果 */
+        }
         
         .card-content { 
             display: flex; 
@@ -1731,7 +1750,7 @@
                 <img src="https://i.pinimg.com/736x/d1/b1/1d/d1b11d5e4dbae547ac0d651476cec488.jpg" alt="Logo" class="logo">
                 <div style="display: flex; align-items: baseline; gap: 8px;">
                     <h1>玩家統計系統</h1>
-                    <span style="font-size: 0.9rem; color: #8892b0; font-weight: bold;">v1.6</span>
+                    <span style="font-size: 0.9rem; color: #8892b0; font-weight: bold;">v1.7</span>
                 </div>
             </div>
             <div class="tabs">
