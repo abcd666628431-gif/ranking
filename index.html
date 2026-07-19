@@ -899,7 +899,12 @@
                 }
                 
                 await addDoc(getCol(activeTab), { ...data, order: minOrder - 1 });
-                writeLog('錄入', playerName, `新增資料至系統`);
+                
+                // 【新增功能】獲取當前選定的實力分級/名人堂階級名稱
+                const rankLabel = getRankLabelByScore(scoreNum, activeTab);
+                const displayRank = rankLabel.endsWith('級') || rankLabel.endsWith('殿堂') ? rankLabel : `${rankLabel} 級`;
+                
+                writeLog('錄入', playerName, `新增資料至系統 (${displayRank})`);
                 playSuccessSound(); 
             }
         };
