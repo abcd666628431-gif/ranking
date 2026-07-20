@@ -894,7 +894,7 @@
             } else {
                 // 將新加入的卡片排序權重設為最小，確保它總是置頂於列表的第一個
                 let minOrder = 0;
-                if (dataStore[activeTab].length > 0) {
+               if (dataStore[activeTab].length > 0) {
                     minOrder = Math.min(...dataStore[activeTab].map(p => p.order || 0));
                 }
                 
@@ -904,12 +904,22 @@
                 const rankLabel = getRankLabelByScore(scoreNum, activeTab);
                 const displayRank = rankLabel.endsWith('級') || rankLabel.endsWith('殿堂') ? rankLabel : `${rankLabel} 級`;
                 
-                writeLog('錄入', playerName, `新增資料至系統 (${displayRank})`);
+                // 【新增功能】根據分數決定對應的等級顏色 (對應卡片左側的階級色)
+                let rankColor = '#80d4ff'; // 預設 D/菁英級 (T5)
+                if (scoreNum >= 105) rankColor = '#ff4d4f';      // S+ / 傳奇殿堂 (T0)
+                else if (scoreNum >= 90) rankColor = '#ff7f7f';  // S / 神話級 (T1)
+                else if (scoreNum >= 75) rankColor = '#ffbf7f';  // A / 史詩級 (T2)
+                else if (scoreNum >= 60) rankColor = '#ffff7f';  // B / 宗師級 (T3)
+                else if (scoreNum >= 45) rankColor = '#bf7fff';  // C / 大師級 (T4)
+                
+                // 利用 HTML 標籤將文字包裝上色寫入日誌
+                writeLog('錄入', playerName, `新增資料至系統 <span style="color: ${rankColor};">(${displayRank})</span>`);
                 playSuccessSound(); 
             }
         };
 
         window.deletePlayer = async () => {
+
             const id = document.getElementById('editId').value;
             if (!id) return;
             
