@@ -651,7 +651,8 @@
                                 const displayOldRank = oldRank.endsWith('級') || oldRank.endsWith('殿堂') ? oldRank : `${oldRank} 級`;
                                 const displayNewRank = newRank.endsWith('級') || newRank.endsWith('殿堂') ? newRank : `${newRank} 級`;
                                 
-                                writeLog('調整', p.name, `由 <span style="color:${getRankColor(oldScore)};">${displayOldRank}</span> 移至 <span style="color:${getRankColor(newScore)};">${displayNewRank}</span>`);
+                                // 【修改】拖曳更新時，日誌優先顯示暱稱，若無則顯示遊戲ID
+                                writeLog('調整', p.nickName || p.name, `由 <span style="color:${getRankColor(oldScore)};">${displayOldRank}</span> 移至 <span style="color:${getRankColor(newScore)};">${displayNewRank}</span>`);
                             }
                         }
 
@@ -898,19 +899,22 @@
                 createDate: document.getElementById('createDate').value || todayStr
             };
             closeModal();
+            
+            // 【修改】決定日誌要顯示的名稱：優先使用暱稱，若無則使用遊戲ID
+            const logDisplayName = data.nickName ? data.nickName : data.name;
+
             if (id) {
                 await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', activeTab, id), data);
                 
                 if (newNote !== oldNote) {
                     const displayNote = newNote ? `更新備註為: [${newNote}]` : '清空了備註';
-                    writeLog('修改', playerName, displayNote);
+                    writeLog('修改', logDisplayName, displayNote);
                 } else {
-                    writeLog('修改', playerName, `資料內容`);
+                    writeLog('修改', logDisplayName, `資料內容`);
                 }
             } else {
-                // 將新加入的卡片排序權重設為最小，確保它總是置頂於列表的第一個
                 let minOrder = 0;
-               if (dataStore[activeTab].length > 0) {
+                if (dataStore[activeTab].length > 0) {
                     minOrder = Math.min(...dataStore[activeTab].map(p => p.order || 0));
                 }
                 
@@ -929,7 +933,7 @@
                 else if (scoreNum >= 45) rankColor = '#bf7fff';  // C / 大師級 (T4)
                 
                 // 利用 HTML 標籤將文字包裝上色寫入日誌
-                writeLog('錄入', playerName, `新增資料至系統 <span style="color: ${rankColor};">(${displayRank})</span>`);
+                writeLog('錄入', logDisplayName, `新增資料至系統 <span style="color: ${rankColor};">(${displayRank})</span>`);
                 playSuccessSound(); 
             }
         };
@@ -961,7 +965,8 @@
             if (isConfirmed) {
                 try {
                     await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', activeTab, id));
-                    if (p) writeLog('刪除', p.name || '未知', '移除了該筆資料');
+                    // 【修改】刪除時，日誌優先顯示暱稱，若無則顯示遊戲ID
+                    if (p) writeLog('刪除', p.nickName || p.name || '未知', '移除了該筆資料');
                     closeModal();
                 } catch (e) {
                     const toast = document.createElement('div');
