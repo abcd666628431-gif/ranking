@@ -80,7 +80,7 @@
         let sysUserColor = localStorage.getItem('sysUserColor') || '#ffbae9';
 
         // 版面動態設定初始化
-        const defaultLayoutUI = { gapMain: 12, radius: 8, cardPx: 8, cardPy: 6, logWidth: 320, borderW: 1, tierBorderW: 1, cardBorderW: 1, logHeight: 600, nameGap: 4 };
+        const defaultLayoutUI = { gapMain: 12, radius: 8, cardPx: 8, cardPy: 6, logWidth: 320, borderW: 1, tierBorderW: 1, cardBorderW: 1, logHeight: 600, nameGap: 4, logFontSize: 13 };
         let currentLayoutUI = JSON.parse(localStorage.getItem('sysLayoutUI')) || {...defaultLayoutUI};
         
         if (currentLayoutUI.logHeight <= 100) currentLayoutUI.logHeight = 600;
@@ -97,6 +97,7 @@
             root.style.setProperty('--sys-card-border-w', (layout.cardBorderW !== undefined ? layout.cardBorderW : layout.borderW) + 'px');
             root.style.setProperty('--sys-log-h', layout.logHeight + 'px');
             root.style.setProperty('--sys-name-gap', layout.nameGap + 'px');
+            root.style.setProperty('--sys-log-font-size', (layout.logFontSize !== undefined ? layout.logFontSize : 13) + 'px');
         }
         applyLayoutUI(currentLayoutUI);
 
@@ -127,6 +128,7 @@
             document.getElementById('setCardBorderW').value = currentLayoutUI.cardBorderW !== undefined ? currentLayoutUI.cardBorderW : currentLayoutUI.borderW;
             document.getElementById('setLogHeight').value = currentLayoutUI.logHeight;
             document.getElementById('setNameGap').value = currentLayoutUI.nameGap;
+            document.getElementById('setLogFontSize').value = currentLayoutUI.logFontSize !== undefined ? currentLayoutUI.logFontSize : 13;
             updateUIPreviewLabels();
             document.getElementById('uiSettingsModal').style.display = 'flex';
         };
@@ -147,7 +149,8 @@
                 tierBorderW: parseInt(document.getElementById('setTierBorderW').value),
                 cardBorderW: parseInt(document.getElementById('setCardBorderW').value),
                 logHeight: parseInt(document.getElementById('setLogHeight').value),
-                nameGap: parseInt(document.getElementById('setNameGap').value)
+                nameGap: parseInt(document.getElementById('setNameGap').value),
+                logFontSize: parseInt(document.getElementById('setLogFontSize').value)
             };
             localStorage.setItem('sysLayoutUI', JSON.stringify(currentLayoutUI)); 
             applyLayoutUI(currentLayoutUI);
@@ -186,7 +189,8 @@
                 tierBorderW: parseInt(document.getElementById('setTierBorderW').value),
                 cardBorderW: parseInt(document.getElementById('setCardBorderW').value),
                 logHeight: parseInt(document.getElementById('setLogHeight').value),
-                nameGap: parseInt(document.getElementById('setNameGap').value)
+                nameGap: parseInt(document.getElementById('setNameGap').value),
+                logFontSize: parseInt(document.getElementById('setLogFontSize').value)
             };
             applyLayoutUI(tempLayout);
             updateUIPreviewLabels();
@@ -203,6 +207,7 @@
             document.getElementById('valCardBorderW').innerText = document.getElementById('setCardBorderW').value + 'px';
             document.getElementById('valLogHeight').innerText = document.getElementById('setLogHeight').value + 'px';
             document.getElementById('valNameGap').innerText = document.getElementById('setNameGap').value + 'px';
+            document.getElementById('valLogFontSize').innerText = document.getElementById('setLogFontSize').value + 'px';
         }
 
         window.openUserNameModal = () => {
@@ -635,7 +640,18 @@
                             const oldRank = getRankLabelByScore(oldScore, currentTab);
                             const newRank = getRankLabelByScore(newScore, currentTab);
                             if(oldRank !== newRank) {
-                                writeLog('調整', p.name, `由 ${oldRank}級 移至 ${newRank}級`);
+                                const getRankColor = (s) => {
+                                    if (s >= 105) return '#ff4d4f';
+                                    if (s >= 90) return '#ff7f7f';
+                                    if (s >= 75) return '#ffbf7f';
+                                    if (s >= 60) return '#ffff7f';
+                                    if (s >= 45) return '#bf7fff';
+                                    return '#80d4ff';
+                                };
+                                const displayOldRank = oldRank.endsWith('級') || oldRank.endsWith('殿堂') ? oldRank : `${oldRank} 級`;
+                                const displayNewRank = newRank.endsWith('級') || newRank.endsWith('殿堂') ? newRank : `${newRank} 級`;
+                                
+                                writeLog('調整', p.name, `由 <span style="color:${getRankColor(oldScore)};">${displayOldRank}</span> 移至 <span style="color:${getRankColor(newScore)};">${displayNewRank}</span>`);
                             }
                         }
 
@@ -1628,7 +1644,7 @@
             flex-direction: column;
             gap: 4px;
             font-family: monospace;
-            font-size: 13px;
+            font-size: var(--sys-log-font-size, 13px);
             color: rgba(255,255,255,0.7);
         }
         
@@ -1646,13 +1662,13 @@
             transition: all 0.3s ease;
         }
         
-        .log-time { color: rgba(255,255,255,0.3); font-size: 8px; margin-right: 4px; flex-shrink: 0; }
-        .log-user { font-weight: bold; font-size: 11.5px; margin-right: 2px; flex-shrink: 0; }
-        .log-action { font-size: 10.5px; margin-right: 2px; flex-shrink: 0; opacity: 0.8; }
+        .log-time { color: rgba(255,255,255,0.3); font-size: 0.65em; margin-right: 4px; flex-shrink: 0; }
+        .log-user { font-weight: bold; font-size: 0.9em; margin-right: 2px; flex-shrink: 0; }
+        .log-action { font-size: 0.85em; margin-right: 2px; flex-shrink: 0; opacity: 0.8; }
         .log-action.danger { color: #f87171; font-weight: bold; opacity: 1; }
-        .log-target { font-weight: 900; font-size: 11.5px; flex-shrink: 1; min-width: 0; transition: all 0.3s ease; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff; }
+        .log-target { font-weight: 900; font-size: 0.9em; flex-shrink: 1; min-width: 0; transition: all 0.3s ease; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fff; }
         .log-target.system { color: #4ade80; }
-        .log-detail { color: #67e8f9; font-weight: bold; font-size: 10.5px; padding-right: 8px; flex-shrink: 0; margin-left: 4px; }
+        .log-detail { color: #67e8f9; font-weight: bold; font-size: 0.85em; padding-right: 8px; flex-shrink: 0; margin-left: 4px; }
 
         .log-entry.expanded .log-target {
             white-space: normal;
@@ -2073,7 +2089,7 @@
                     <input type="range" id="setGapMain" min="0" max="40" value="12" oninput="previewUISettings()">
                 </div>
                 
-                <div class="ui-slider-group">
+               <div class="ui-slider-group">
                     <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
                         <label>日誌側邊欄寬度</label><span id="valLogWidth" class="val-badge">320px</span>
                     </div>
@@ -2085,6 +2101,13 @@
                         <label>日誌側邊欄高度 (px)</label><span id="valLogHeight" class="val-badge">600px</span>
                     </div>
                     <input type="range" id="setLogHeight" min="200" max="1200" value="600" oninput="previewUISettings()">
+                </div>
+
+                <div class="ui-slider-group">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                        <label>日誌字體大小 (px)</label><span id="valLogFontSize" class="val-badge">13px</span>
+                    </div>
+                    <input type="range" id="setLogFontSize" min="10" max="24" value="13" oninput="previewUISettings()">
                 </div>
                 
                 <div class="ui-slider-group">
