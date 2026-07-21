@@ -617,13 +617,10 @@
                     handle: '.drag-handle',
                     animation: 150,
                     disabled: !isEditMode,
-                    forceFallback: true, 
-                    fallbackClass: "sortable-fallback",
                     ghostClass: "sortable-ghost",
-                    onEnd: async (evt) => {
+                    onEnd: (evt) => {
                         const id = evt.item.dataset.id;
                         const toTier = evt.to.dataset.tier;
-                        const newOrder = evt.newIndex;
                         
                         const p = dataStore[currentTab].find(x => x.id === id);
                         let oldScore = p ? (p.score || 0) : parseInt(evt.item.dataset.score) || 0;
@@ -636,6 +633,8 @@
                         else if (toTier === 'T4' && (newScore < 45 || newScore >= 60)) newScore = 50;
                         else if (toTier === 'T5' && newScore >= 45) newScore = 35;
 
+                        // 【修復】徹底解決錯位：採用「DOM陣列索引強制重排法」與「本地樂觀更新 (Optimistic Update)」
+                        // 1. 先處理日誌
                         if (oldScore !== newScore && p) {
                             const oldRank = getRankLabelByScore(oldScore, currentTab);
                             const newRank = getRankLabelByScore(newScore, currentTab);
@@ -650,14 +649,39 @@
                                 };
                                 const displayOldRank = oldRank.endsWith('級') || oldRank.endsWith('殿堂') ? oldRank : `${oldRank} 級`;
                                 const displayNewRank = newRank.endsWith('級') || newRank.endsWith('殿堂') ? newRank : `${newRank} 級`;
-                                
-                                // 【修改】拖曳更新時，日誌優先顯示暱稱，若無則顯示遊戲ID
                                 writeLog('調整', p.nickName || p.name, `由 <span style="color:${getRankColor(oldScore)};">${displayOldRank}</span> 移至 <span style="color:${getRankColor(newScore)};">${displayNewRank}</span>`);
                             }
                         }
 
-                        const docRef = doc(db, 'artifacts', appId, 'public', 'data', currentTab, id);
-                        await updateDoc(docRef, { order: newOrder, score: newScore });
+                        // 2. 抓取目標區域內「所有」卡片，依照目前視覺順序，強制給予 0, 1, 2, 3... 的整數排序
+                        const targetChildren = Array.from(evt.to.children);
+                        targetChildren.forEach((child, index) => {
+                            const childId = child.dataset.id;
+                            const item = dataStore[currentTab].find(x => x.id === childId);
+                            if (item) {
+                                let payload = {};
+                                let needsUpdate = false;
+                                
+                                // 判斷是否為剛拖曳的那張卡片，若是，更新分數
+                                if (childId === id && item.score !== newScore) {
+                                    item.score = newScore;
+                                    payload.score = newScore;
+                                    needsUpdate = true;
+                                }
+                                
+                                // 更新精準排序順序
+                                if (item.order !== index) {
+                                    item.order = index; // 本地立刻更新，防止畫面閃爍跳回
+                                    payload.order = index;
+                                    needsUpdate = true;
+                                }
+
+                                // 只有資料真的改變時才觸發資料庫寫入，節省資源
+                                if (needsUpdate) {
+                                    updateDoc(doc(db, 'artifacts', appId, 'public', 'data', currentTab, childId), payload);
+                                }
+                            }
+                        });
                     }
                 });
                 sortableInstances.push(inst);
@@ -675,14 +699,21 @@
                 handle: '.drag-handle',
                 animation: 150,
                 disabled: !isEditMode,
-                forceFallback: true,
-                fallbackClass: "sortable-fallback",
                 ghostClass: "sortable-ghost",
-                onEnd: async (evt) => {
+                onEnd: (evt) => {
                     const id = evt.item.dataset.id;
-                    const newOrder = evt.newIndex;
-                    const docRef = doc(db, 'artifacts', appId, 'public', 'data', currentTab, id);
-                    await updateDoc(docRef, { order: newOrder });
+                    
+                    // 【修復】列表模式也採用「DOM陣列索引強制重排法」與「本地樂觀更新」
+                    const targetChildren = Array.from(evt.to.children);
+                    targetChildren.forEach((child, index) => {
+                        const childId = child.dataset.id;
+                        const item = dataStore[currentTab].find(x => x.id === childId);
+                        
+                        if (item && item.order !== index) {
+                            item.order = index; // 本地立刻更新，防止閃爍跳回
+                            updateDoc(doc(db, 'artifacts', appId, 'public', 'data', currentTab, childId), { order: index });
+                        }
+                    });
                 }
             });
         }
